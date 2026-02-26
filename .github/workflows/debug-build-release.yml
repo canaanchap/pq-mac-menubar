@@ -20,8 +20,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect project directory
+        id: project
+        run: |
+          set -euo pipefail
+          # Prefer root package; otherwise locate first nested Swift package.
+          if [[ -f "${GITHUB_WORKSPACE}/Package.swift" ]]; then
+            PROJECT_DIR="${GITHUB_WORKSPACE}"
+          else
+            PKG_FILE="$(find "${GITHUB_WORKSPACE}" -type f -name Package.swift -print -quit)"
+            PROJECT_DIR="${PKG_FILE%/Package.swift}"
+          fi
+          if [[ -z "${PROJECT_DIR:-}" || ! -f "${PROJECT_DIR}/Package.swift" ]]; then
+            echo "Could not find Package.swift in repository checkout." >&2
+            exit 1
+          fi
+          echo "project_dir=${PROJECT_DIR}" >> "$GITHUB_OUTPUT"
+          echo "Using project dir: ${PROJECT_DIR}"
+
       - name: Resolve version
         id: ver
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
           set -euo pipefail
           VERSION="$(tr -d ' \n\r' < VERSION)"
@@ -38,19 +57,23 @@ jobs:
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       - name: Ensure scripts are executable
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: chmod +x ./scripts/dev-build.sh ./scripts/dev-setup.sh || true
 
       - name: Build (debug)
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: ./scripts/dev-build.sh
 
       - name: Locate debug binary
         id: binpath
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
           BIN_PATH="$(swift build -c debug --show-bin-path)"
           echo "bin_path=$BIN_PATH" >> "$GITHUB_OUTPUT"
           ls -la "$BIN_PATH"
 
       - name: Package debug .app bundle
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
           set -euo pipefail
           BIN_PATH="${{ steps.binpath.outputs.bin_path }}"
@@ -93,6 +116,7 @@ jobs:
           codesign --force --deep --sign - "$APP_DIR"
 
       - name: Verify bundled resources
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
           set -euo pipefail
           APP_DIR="dist/${APP_NAME}-debug.app"
@@ -100,6 +124,7 @@ jobs:
           test -d "$APP_DIR/Contents/Resources/pq-menubar_PQMenuBarApp.bundle"
 
       - name: Zip artifact
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
           set -euo pipefail
           mkdir -p out
@@ -110,7 +135,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.ver.outputs.tag }}
-          path: out/${{ steps.ver.outputs.zip }}
+          path: ${{ steps.project.outputs.project_dir }}/out/${{ steps.ver.outputs.zip }}
           if-no-files-found: error
 
       - name: Create debug release for commit
@@ -121,4 +146,4 @@ jobs:
           prerelease: true
           make_latest: false
           generate_release_notes: false
-          files: out/${{ steps.ver.outputs.zip }}
+          files: ${{ steps.project.outputs.project_dir }}/out/${{ steps.ver.outputs.zip }}
