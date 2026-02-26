@@ -1,2 +1,7 @@
-pq-cli/
+.build/
+**/.build/
+.swiftpm/
+**/.swiftpm/
 .DS_Store
+.build/
+**/.build/
