@@ -465,7 +465,7 @@ final class AppState: ObservableObject {
     }
 
     private func legacyBridge() throws -> LegacyPKLBridge {
-        guard let converter = Bundle.module.url(forResource: "convert_pkl", withExtension: "py", subdirectory: "tools") else {
+        guard let converter = Self.findBundledResource(named: "convert_pkl", withExtension: "py", subdirectory: "tools") else {
             throw NSError(domain: "pq-menubar", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing convert_pkl.py"])
         }
         return LegacyPKLBridge(converterPath: converter)
@@ -784,12 +784,8 @@ final class AppState: ObservableObject {
             return
         }
         let candidates: [URL?] = [
-            Bundle.module.url(forResource: "default-data", withExtension: "json", subdirectory: "data"),
-            Bundle.module.url(forResource: "default-data", withExtension: "json"),
-            Bundle.main.url(forResource: "default-data", withExtension: "json", subdirectory: "data"),
-            Bundle.main.url(forResource: "default-data", withExtension: "json"),
-            URL(fileURLWithPath: fm.currentDirectoryPath)
-                .appendingPathComponent("Sources/PQMenuBarApp/Resources/data/default-data.json"),
+            findBundledResource(named: "default-data", withExtension: "json", subdirectory: "data"),
+            findBundledResource(named: "default-data", withExtension: "json"),
         ]
 
         if let source = candidates.compactMap({ $0 }).first(where: { fm.fileExists(atPath: $0.path) }) {
@@ -805,6 +801,48 @@ final class AppState: ObservableObject {
                 "checked_paths": candidates.compactMap { $0?.path },
             ]
         )
+    }
+
+    private static func findBundledResource(named name: String, withExtension ext: String, subdirectory: String? = nil) -> URL? {
+        let fm = FileManager.default
+        let filename = "\(name).\(ext)"
+        var roots: [URL] = []
+
+        if let r = Bundle.main.resourceURL { roots.append(r) }
+        roots.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources", isDirectory: true))
+        roots.append(URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("Sources/PQMenuBarApp/Resources", isDirectory: true))
+
+        // De-duplicate candidate roots while preserving order.
+        var uniqueRoots: [URL] = []
+        var seen = Set<String>()
+        for root in roots {
+            let key = root.standardizedFileURL.path
+            if seen.insert(key).inserted {
+                uniqueRoots.append(root)
+            }
+        }
+
+        var candidates: [URL] = []
+        for root in uniqueRoots {
+            if let subdirectory {
+                candidates.append(root.appendingPathComponent(subdirectory, isDirectory: true).appendingPathComponent(filename))
+            }
+            candidates.append(root.appendingPathComponent(filename))
+
+            let bundles = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+            for bundle in bundles where bundle.pathExtension == "bundle" {
+                if let subdirectory {
+                    candidates.append(bundle.appendingPathComponent(subdirectory, isDirectory: true).appendingPathComponent(filename))
+                }
+                candidates.append(bundle.appendingPathComponent(filename))
+                candidates.append(bundle.appendingPathComponent("Contents/Resources", isDirectory: true).appendingPathComponent(filename))
+                if let subdirectory {
+                    candidates.append(bundle.appendingPathComponent("Contents/Resources", isDirectory: true).appendingPathComponent(subdirectory, isDirectory: true).appendingPathComponent(filename))
+                }
+            }
+        }
+
+        return candidates.first(where: { fm.fileExists(atPath: $0.path) })
     }
 
     private static let defaultPortraitPromptTemplate = """
