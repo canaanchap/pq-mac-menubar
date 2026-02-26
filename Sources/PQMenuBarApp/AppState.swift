@@ -161,6 +161,43 @@ final class AppState: ObservableObject {
     }
 
     func start(character: PlayerState) {
+        start(character: character, emitFlash: true)
+    }
+
+    func loadAndStartSelectedCharacter() {
+        guard let target = selectedCharacter else {
+            flash("No character selected.")
+            return
+        }
+
+        if sessionStarted {
+            let current = state.activeCharacter
+            if current.id == target.id {
+                flash("\(target.name) is already running.")
+                return
+            }
+
+            runtime.manualSave()
+            var closed = state
+            closed.isPaused = true
+            runtime.replaceState(closed)
+            runtime.setPaused(true)
+            runtime.stop()
+            sessionStarted = false
+            selectedCharacterID = nil
+            portraitGenerationInFlightCharacterIDs.remove(current.id)
+            persistRoster()
+            refreshPortraitForCurrentCharacter()
+
+            start(character: target, emitFlash: false)
+            flash("\(current.name) was saved! Closing. Loaded \(target.name), starting!")
+            return
+        }
+
+        start(character: target, emitFlash: true)
+    }
+
+    private func start(character: PlayerState, emitFlash: Bool) {
         var next = GameState(
             activeCharacter: character,
             isPaused: false,
@@ -182,7 +219,9 @@ final class AppState: ObservableObject {
         persistRoster()
         refreshPortraitForCurrentCharacter()
         handleAutomaticPortraitUpdate(character: character, previousLevel: nil)
-        flash("Started \(character.name).")
+        if emitFlash {
+            flash("Started \(character.name).")
+        }
     }
 
     func closeCurrentCharacter() {

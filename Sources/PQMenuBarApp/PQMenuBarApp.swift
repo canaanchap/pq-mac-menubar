@@ -22,13 +22,14 @@ struct PQMenuBarApp: App {
                 .environmentObject(appState)
         } label: {
             HStack(spacing: 6) {
-                ShieldXPView(percent: appState.state.activeCharacter.xpProgressPercent)
+                ShieldXPView(percent: appState.sessionStarted ? appState.state.activeCharacter.xpProgressPercent : 0)
                     .frame(width: 14, height: 16)
                 if appState.sessionStarted && appState.state.isPaused {
                     Image(systemName: "pause.fill")
                         .font(.system(size: 9, weight: .bold))
                 }
-                Text("Lv \(appState.state.activeCharacter.level)")
+                Text(appState.sessionStarted ? "Lv \(appState.state.activeCharacter.level)" : "Lv ?")
+                    .foregroundStyle(appState.sessionStarted ? .primary : .secondary)
                 if !appState.compactMode {
                     if appState.sessionStarted {
                         let pct = Int(appState.state.activeCharacter.taskProgressPercent)
@@ -37,12 +38,12 @@ struct PQMenuBarApp: App {
                         Text("\(pct)%")
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Ready")
+                        Text("-")
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .opacity(appState.sessionStarted && appState.state.isPaused ? 0.55 : 1.0)
+            .opacity(appState.sessionStarted && appState.state.isPaused ? 0.55 : (appState.sessionStarted ? 1.0 : 0.7))
             .help("Progress Quest")
         }
         .menuBarExtraStyle(.window)

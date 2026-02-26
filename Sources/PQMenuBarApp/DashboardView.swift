@@ -302,8 +302,9 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 GroupBox("Gameplay") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Compact menubar mode", isOn: $appState.compactMode)
+                        Toggle("🚧 Compact menubar mode (Coming soon)", isOn: .constant(false))
                             .toggleStyle(.switch)
+                            .disabled(true)
                         Toggle("Persistent progress window (minimize + frame restore)", isOn: $appState.persistentDashboardWindow)
                             .toggleStyle(.switch)
                         Toggle(
@@ -340,19 +341,26 @@ struct DashboardView: View {
 
                 GroupBox("Character Library") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Picker("Selected", selection: Binding(
-                            get: { appState.selectedCharacterID },
-                            set: {
-                                appState.selectedCharacterID = $0
-                                appState.refreshPortraitForCurrentCharacter()
+                        HStack {
+                            Picker("Selected", selection: Binding(
+                                get: { appState.selectedCharacterID },
+                                set: {
+                                    appState.selectedCharacterID = $0
+                                    appState.refreshPortraitForCurrentCharacter()
+                                }
+                            )) {
+                                Text("-").tag(Optional<UUID>.none)
+                                ForEach(appState.roster, id: \.id) { c in
+                                    Text("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)").tag(Optional(c.id))
+                                }
                             }
-                        )) {
-                            Text("-").tag(Optional<UUID>.none)
-                            ForEach(appState.roster, id: \.id) { c in
-                                Text("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)").tag(Optional(c.id))
+                            .pickerStyle(.menu)
+
+                            Button("Load and Start") {
+                                appState.loadAndStartSelectedCharacter()
                             }
+                            .disabled(appState.selectedCharacterID == nil)
                         }
-                        .pickerStyle(.menu)
 
                         HStack {
                             Button("Delete Selected") { appState.deleteSelectedCharacter() }
