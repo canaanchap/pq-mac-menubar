@@ -84,6 +84,11 @@ jobs:
           cp "$BIN_PATH/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
           chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
 
+          # Copy direct app resources as a fallback for runtime lookup in packaged builds.
+          if [[ -d "Sources/PQMenuBarApp/Resources" ]]; then
+            ditto "Sources/PQMenuBarApp/Resources" "$APP_DIR/Contents/Resources"
+          fi
+
           # Copy SwiftPM resource bundles (required for Bundle.module lookups).
           # We search .build to avoid layout mismatches across toolchain versions.
           BUNDLES="$(find .build -type d -name "*.bundle" | sort)"

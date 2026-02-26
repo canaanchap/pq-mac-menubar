@@ -1,0 +1,2 @@
+Placeholder icon in use.
+TODO: replace with provided SVG assets.

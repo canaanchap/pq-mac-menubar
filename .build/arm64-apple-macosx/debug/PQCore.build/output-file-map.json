@@ -1,0 +1,75 @@
+{
+  "": {
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/master.swiftdeps"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/DataDirectory.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/DataDirectory.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/DataDirectory.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/DataDirectory~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/DataDirectory.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/DataDirectory.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/EventLogStore.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/EventLogStore.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/EventLogStore.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/EventLogStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/EventLogStore.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/EventLogStore.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/GameModels.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameModels.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameModels.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameModels~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameModels.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameModels.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/GameRuntime.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameRuntime.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameRuntime.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameRuntime~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameRuntime.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/GameRuntime.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/LegacyPKLBridge.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/LegacyPKLBridge.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/LegacyPKLBridge.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/LegacyPKLBridge~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/LegacyPKLBridge.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/LegacyPKLBridge.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/PQDataLoader.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQDataLoader.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQDataLoader.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQDataLoader~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQDataLoader.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQDataLoader.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/PQLingo.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQLingo.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQLingo.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQLingo~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQLingo.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQLingo.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/PQRandom.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQRandom.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQRandom.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQRandom~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQRandom.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/PQRandom.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/SaveStore.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/SaveStore.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/SaveStore.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/SaveStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/SaveStore.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/SaveStore.dia"
+  },
+  "/Users/canaan/Desktop/temp/Sources/PQCore/TickEngine.swift": {
+    "dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/TickEngine.d",
+    "object": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/TickEngine.swift.o",
+    "swiftmodule": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/TickEngine~partial.swiftmodule",
+    "swift-dependencies": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/TickEngine.swiftdeps",
+    "diagnostics": "/Users/canaan/Desktop/temp/.build/arm64-apple-macosx/debug/PQCore.build/TickEngine.dia"
+  }
+}
