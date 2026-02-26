@@ -3,6 +3,11 @@ import AppKit
 import PQCore
 
 struct PopoverView: View {
+    private enum DashboardRoute: String {
+        case overview
+        case settings
+    }
+
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
@@ -77,10 +82,10 @@ struct PopoverView: View {
 
             HStack {
                 Button("View Progress") {
-                    openDashboardWindow()
+                    openDashboardWindow(route: .overview)
                 }
                 Button("Settings") {
-                    openDashboardWindow()
+                    openDashboardWindow(route: .settings)
                 }
             }
 
@@ -200,10 +205,10 @@ struct PopoverView: View {
 
             HStack {
                 Button("View Progress") {
-                    openDashboardWindow()
+                    openDashboardWindow(route: .overview)
                 }
                 Button("Settings") {
-                    openDashboardWindow()
+                    openDashboardWindow(route: .settings)
                 }
                 Button("Close Character") {
                     appState.closeCurrentCharacter()
@@ -245,7 +250,8 @@ struct PopoverView: View {
         }
     }
 
-    private func openDashboardWindow() {
+    private func openDashboardWindow(route: DashboardRoute) {
+        appState.requestDashboardTab(route.rawValue)
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "dashboard")
         dismiss()

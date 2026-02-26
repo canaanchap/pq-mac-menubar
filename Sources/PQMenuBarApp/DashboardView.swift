@@ -44,7 +44,13 @@ struct DashboardView: View {
                 .tag(Tab.settings)
         }
         .frame(minWidth: 980, minHeight: 650)
-        .onAppear { installKeyboardMonitorIfNeeded() }
+        .onAppear {
+            installKeyboardMonitorIfNeeded()
+            applyRequestedTab()
+        }
+        .onChange(of: appState.dashboardRouteToken) { _, _ in
+            applyRequestedTab()
+        }
         .onDisappear { removeKeyboardMonitor() }
         .overlay(alignment: .top) {
             if let msg = appState.statusMessage {
@@ -704,6 +710,15 @@ struct DashboardView: View {
             appState.flashDebug("Debug reset to default (1.00x).")
         }
         debugTickEdited = false
+    }
+
+    private func applyRequestedTab() {
+        switch appState.dashboardRequestedTab {
+        case "settings":
+            selectedTab = .settings
+        default:
+            selectedTab = .overview
+        }
     }
 
     private func encumbrance(_ p: PlayerState) -> Int {

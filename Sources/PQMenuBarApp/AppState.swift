@@ -23,6 +23,8 @@ final class AppState: ObservableObject {
     @Published var selectedCharacterID: UUID?
     @Published var sessionStarted: Bool
     @Published var statusMessage: String?
+    @Published var dashboardRequestedTab: String = "overview"
+    @Published var dashboardRouteToken: Int = 0
     @Published var portraitImageURL: URL?
     @Published var openAIAPIKey: String {
         didSet {
@@ -215,6 +217,12 @@ final class AppState: ObservableObject {
         selectedCharacterID = c.id
         persistRoster()
         refreshPortraitForCurrentCharacter()
+        start(character: c)
+    }
+
+    func requestDashboardTab(_ tab: String) {
+        dashboardRequestedTab = tab
+        dashboardRouteToken &+= 1
     }
 
     func togglePause() {
@@ -356,14 +364,33 @@ final class AppState: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
+            let importedNames: [String]
             if url.pathExtension.lowercased() == "json" {
-                try importFromJSON(url)
+                importedNames = try importFromJSON(url)
             } else {
-                let imported = try importLegacyCharacterFile(url)
-                try importFromJSON(imported)
+                let raw = try Data(contentsOf: url)
+                if let webData = Self.decodeWebsitePayload(from: raw),
+                   let webPlayer = try decodeWebsiteExportPlayer(from: webData) {
+                    mergeImportedCharacter(webPlayer)
+                    importedNames = [webPlayer.name]
+                } else {
+                    let imported = try importLegacyCharacterFile(url)
+                    importedNames = try importFromJSON(imported)
+                }
+            }
+            let names = importedNames.joined(separator: ", ")
+            flash("Imported: \(names)")
+            if !importedNames.isEmpty {
+                let shouldStart = NSAlert.runAskYesNo(
+                    title: "Start imported character?",
+                    message: "Start \(importedNames.first ?? "character") now?"
+                )
+                if shouldStart, !sessionStarted {
+                    startSelectedCharacter()
+                }
             }
         } catch {
-            events.insert(.init(message: "Import failed: \(error.localizedDescription)"), at: 0)
+            flash("Import failed: \(error.localizedDescription)")
         }
     }
 
@@ -404,30 +431,42 @@ final class AppState: ObservableObject {
         return Stats(values: values)
     }
 
-    private func importFromJSON(_ url: URL) throws {
+    @discardableResult
+    private func importFromJSON(_ url: URL) throws -> [String] {
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
         if let gameState = try? decoder.decode(GameState.self, from: data) {
             mergeImportedCharacter(gameState.activeCharacter)
-            events.insert(.init(message: "Imported JSON save: \(url.lastPathComponent)"), at: 0)
-            return
+            return [gameState.activeCharacter.name]
         }
 
         if let player = try? decoder.decode(PlayerState.self, from: data) {
             mergeImportedCharacter(player)
-            events.insert(.init(message: "Imported character: \(player.name)"), at: 0)
-            return
+            return [player.name]
         }
 
-        let imported = try decoder.decode(ImportedPayload.self, from: data)
-        var importedCount = 0
-        for p in imported.players {
-            mergeImportedCharacter(p.toPlayerState(defaultData: dataBundle))
-            importedCount += 1
+        if let imported = try? decoder.decode(ImportedPayload.self, from: data) {
+            var names: [String] = []
+            for p in imported.players {
+                let player = p.toPlayerState(defaultData: dataBundle)
+                mergeImportedCharacter(player)
+                names.append(player.name)
+            }
+            return names
         }
-        events.insert(.init(message: "Imported \(importedCount) character(s)."), at: 0)
+
+        if let webPlayer = try decodeWebsiteExportPlayer(from: data) {
+            mergeImportedCharacter(webPlayer)
+            return [webPlayer.name]
+        }
+
+        throw NSError(
+            domain: "pq-menubar",
+            code: 91,
+            userInfo: [NSLocalizedDescriptionKey: "The data couldn't be read because it's missing or unsupported fields."]
+        )
     }
 
     private func exportSelectedCharacterJSON(to url: URL) throws {
@@ -469,6 +508,189 @@ final class AppState: ObservableObject {
             throw NSError(domain: "pq-menubar", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing convert_pkl.py"])
         }
         return LegacyPKLBridge(converterPath: converter)
+    }
+
+    private static func decodeWebsitePayload(from raw: Data) -> Data? {
+        if let first = raw.first, first == UInt8(ascii: "{") || first == UInt8(ascii: "[") {
+            return raw
+        }
+        guard let textRaw = String(data: raw, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !textRaw.isEmpty else {
+            return nil
+        }
+        if textRaw.first == "{" || textRaw.first == "[" {
+            return textRaw.data(using: .utf8)
+        }
+        if let direct = Data(base64Encoded: textRaw) {
+            return direct
+        }
+        let urlSafe = textRaw.replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let padded = urlSafe + String(repeating: "=", count: (4 - urlSafe.count % 4) % 4)
+        return Data(base64Encoded: padded)
+    }
+
+    private func decodeWebsiteExportPlayer(from data: Data) throws -> PlayerState? {
+        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let traits = obj["Traits"] as? [String: Any],
+              let rawName = traits["Name"] as? String else {
+            return nil
+        }
+
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+
+        let race = (traits["Race"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let className = (traits["Class"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let level = max(1, Self.intFromAny(traits["Level"], fallback: 1))
+        let statsObj = obj["Stats"] as? [String: Any] ?? [:]
+        let stats = Stats(values: [
+            StatType.strength.rawValue: Self.intFromAny(statsObj[StatType.strength.rawValue], fallback: 10),
+            StatType.condition.rawValue: Self.intFromAny(statsObj[StatType.condition.rawValue], fallback: 10),
+            StatType.dexterity.rawValue: Self.intFromAny(statsObj[StatType.dexterity.rawValue], fallback: 10),
+            StatType.intelligence.rawValue: Self.intFromAny(statsObj[StatType.intelligence.rawValue], fallback: 10),
+            StatType.wisdom.rawValue: Self.intFromAny(statsObj[StatType.wisdom.rawValue], fallback: 10),
+            StatType.charisma.rawValue: Self.intFromAny(statsObj[StatType.charisma.rawValue], fallback: 10),
+            StatType.hpMax.rawValue: Self.intFromAny(statsObj[StatType.hpMax.rawValue], fallback: 8),
+            StatType.mpMax.rawValue: Self.intFromAny(statsObj[StatType.mpMax.rawValue], fallback: 8),
+        ])
+
+        var player = PlayerState(
+            name: name,
+            birthday: Self.dateFromAny(obj["birthday"]) ?? Date(),
+            race: (race?.isEmpty == false ? race! : (dataBundle.races.first?.name ?? "Half Orc")),
+            characterClass: (className?.isEmpty == false ? className! : (dataBundle.classes.first?.name ?? "Ur-Paladin")),
+            stats: stats
+        )
+
+        player.level = level
+        player.elapsed = Self.doubleFromAny(obj["elapsed"], fallback: 0)
+        if let exp = obj["ExpBar"] as? [String: Any] {
+            player.expBar = Bar(
+                max: max(1, Self.doubleFromAny(exp["max"], fallback: PlayerState.levelUpTime(level))),
+                position: max(0, Self.doubleFromAny(exp["position"], fallback: 0))
+            )
+        }
+
+        let plot = obj["PlotBar"] as? [String: Any]
+        let quest = obj["QuestBar"] as? [String: Any]
+        player.questBook = QuestBook(
+            act: max(0, Self.intFromAny(obj["act"], fallback: 0)),
+            quests: (obj["Quests"] as? [String]) ?? [],
+            plotBar: Bar(
+                max: max(1, Self.doubleFromAny(plot?["max"], fallback: 1)),
+                position: max(0, Self.doubleFromAny(plot?["position"], fallback: 0))
+            ),
+            questBar: Bar(
+                max: max(1, Self.doubleFromAny(quest?["max"], fallback: 1)),
+                position: max(0, Self.doubleFromAny(quest?["position"], fallback: 0))
+            ),
+            monster: nil
+        )
+
+        var gold = 0
+        if let inv = obj["Inventory"] as? [[Any]] {
+            for row in inv where row.count >= 2 {
+                let itemName = String(describing: row[0])
+                let qty = Self.intFromAny(row[1], fallback: 0)
+                if itemName.caseInsensitiveCompare("Gold") == .orderedSame {
+                    gold = qty
+                } else if qty > 0 {
+                    player.addInventoryItem(itemName, quantity: qty)
+                }
+            }
+        }
+        player.inventoryGold = gold
+        player.inventoryCapacity = max(1, Self.intFromAny((obj["EncumBar"] as? [String: Any])?["max"], fallback: 10 + player.stats[.strength]))
+
+        if let equips = obj["Equips"] as? [String: Any] {
+            var mapped: [String: String] = [:]
+            for (k, v) in equips {
+                mapped[k] = String(describing: v)
+            }
+            player.equipment = mapped
+        }
+        if let best = obj["bestequip"] as? String, !best.isEmpty {
+            player.bestEquipment = best
+        }
+
+        if let spellRows = obj["Spells"] as? [[Any]] {
+            player.spells = []
+            for row in spellRows where row.count >= 2 {
+                let spellName = String(describing: row[0])
+                let lvl = max(1, Self.romanOrIntToInt(row[1], fallback: 1))
+                player.addSpell(spellName, levelInc: lvl)
+            }
+        }
+
+        player.task = GameTask(kind: .regular, description: (obj["kill"] as? String) ?? "Working", duration: 1, monster: nil)
+        if let task = obj["TaskBar"] as? [String: Any] {
+            player.taskBar = Bar(
+                max: max(1, Self.doubleFromAny(task["max"], fallback: 1)),
+                position: max(0, Self.doubleFromAny(task["position"], fallback: 0))
+            )
+        }
+        player.queue = []
+        return player
+    }
+
+    private static func intFromAny(_ value: Any?, fallback: Int) -> Int {
+        switch value {
+        case let n as Int: return n
+        case let n as Double: return Int(n)
+        case let n as NSNumber: return n.intValue
+        case let s as String: return Int(s) ?? fallback
+        default: return fallback
+        }
+    }
+
+    private static func doubleFromAny(_ value: Any?, fallback: Double) -> Double {
+        switch value {
+        case let n as Double: return n
+        case let n as Float: return Double(n)
+        case let n as Int: return Double(n)
+        case let n as NSNumber: return n.doubleValue
+        case let s as String: return Double(s) ?? fallback
+        default: return fallback
+        }
+    }
+
+    private static func dateFromAny(_ value: Any?) -> Date? {
+        if let d = value as? Date { return d }
+        guard let s = value as? String, !s.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        if let d = iso.date(from: s) { return d }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f.date(from: s)
+    }
+
+    private static func romanOrIntToInt(_ value: Any?, fallback: Int) -> Int {
+        if let n = value as? Int { return n }
+        guard let s = value as? String else { return fallback }
+        if let n = Int(s) { return n }
+        return romanToInt(s) ?? fallback
+    }
+
+    private static func romanToInt(_ s: String) -> Int? {
+        let map: [Character: Int] = ["I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000]
+        let chars = Array(s.uppercased())
+        guard !chars.isEmpty else { return nil }
+        var total = 0
+        var i = 0
+        while i < chars.count {
+            guard let curr = map[chars[i]] else { return nil }
+            if i + 1 < chars.count, let next = map[chars[i + 1]], next > curr {
+                total += (next - curr)
+                i += 2
+            } else {
+                total += curr
+                i += 1
+            }
+        }
+        return total
     }
 
     private func persistRoster() {
@@ -890,5 +1112,16 @@ private struct ImportedPlayer: Codable {
         let raceName = race.isEmpty ? (defaultData.races.first?.name ?? "Half Orc") : race
         let className = characterClass.isEmpty ? (defaultData.classes.first?.name ?? "Ur-Paladin") : characterClass
         return PlayerState(name: name, race: raceName, characterClass: className, stats: baseStats)
+    }
+}
+
+private extension NSAlert {
+    static func runAskYesNo(title: String, message: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "Yes")
+        alert.addButton(withTitle: "No")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }
