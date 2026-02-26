@@ -1,0 +1,50 @@
+[project]
+name = "pqcli"
+version = "1.0.4"
+description = "Progress Quest: the CLI edition"
+authors = [{ name = "Laura Kurczewska", email = "dash@wind.garden" }]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+classifiers = [
+    "Environment :: Console",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Games/Entertainment :: Role-Playing",
+    "Topic :: Games/Entertainment :: Simulation",
+]
+
+dependencies = [
+    "xdg-base-dirs>=6.0.0,<7.0.0",
+    "urwid>=2.1.2,<3.0.0",
+    "urwid-readline>=0.13,<1.0.0",
+]
+
+[project.optional-dependencies]
+windows = ["windows-curses>=2.3.0,<3.0.0"]
+
+[project.urls]
+Repository = "https://github.com/rr-/pq-cli.git"
+
+[project.scripts]
+pqcli = "pqcli.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = ["pre-commit>=2.16.0"]
+
+[tool.black]
+line-length = 79
+
+[tool.isort]
+known_first_party = "pqcli"
+multi_line_output = 3
+include_trailing_comma = true
