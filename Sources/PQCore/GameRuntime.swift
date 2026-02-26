@@ -9,6 +9,7 @@ public final class GameRuntime {
     private let logStore: EventLogStore
     private var timer: DispatchSourceTimer?
     private let queue = DispatchQueue(label: "pq.runtime", qos: .background)
+    private let queueKey = DispatchSpecificKey<UInt8>()
     private var tickRateMultiplier: Double = 1.0
     private var stateDirty: Bool = true
     private var lastPersistAt: Date = .distantPast
@@ -22,6 +23,7 @@ public final class GameRuntime {
         self.engine = TickEngine(data: data)
         self.saveStore = saveStore
         self.logStore = logStore
+        self.queue.setSpecific(key: queueKey, value: 1)
 
         if self.state.rngState == 0 {
             self.state.rngState = PQRNG.seed(from: "\(initialState.activeCharacter.birthday.timeIntervalSince1970)")
@@ -43,7 +45,11 @@ public final class GameRuntime {
     }
 
     public func stop() {
-        queue.async {
+        if DispatchQueue.getSpecific(key: queueKey) != nil {
+            stopOnQueue()
+            return
+        }
+        queue.sync {
             self.stopOnQueue()
         }
     }

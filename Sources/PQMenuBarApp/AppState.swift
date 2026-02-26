@@ -178,17 +178,7 @@ final class AppState: ObservableObject {
             }
 
             runtime.manualSave()
-            var closed = state
-            closed.isPaused = true
-            runtime.replaceState(closed)
-            runtime.setPaused(true)
-            runtime.stop()
-            sessionStarted = false
-            selectedCharacterID = nil
             portraitGenerationInFlightCharacterIDs.remove(current.id)
-            persistRoster()
-            refreshPortraitForCurrentCharacter()
-
             start(character: target, emitFlash: false)
             flash("\(current.name) was saved! Closing. Loaded \(target.name), starting!")
             return
