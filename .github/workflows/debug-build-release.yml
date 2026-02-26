@@ -20,6 +20,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve version
+        id: ver
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d ' \n\r' < VERSION)"
+          if [[ -z "$VERSION" ]]; then
+            echo "VERSION file is empty" >&2
+            exit 1
+          fi
+          TAG="debug-v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          NAME="Debug v${VERSION} (build ${GITHUB_RUN_NUMBER})"
+          ZIP="PQMenuBarApp-debug-v${VERSION}-build.${GITHUB_RUN_NUMBER}.zip"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
       - name: Ensure scripts are executable
         run: chmod +x ./scripts/dev-build.sh ./scripts/dev-setup.sh || true
 
@@ -44,11 +61,16 @@ jobs:
           cp "$BIN_PATH/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
           chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
 
-          # Copy SwiftPM resource bundles, if present.
-          shopt -s nullglob
-          for bundle in "$BIN_PATH"/*.bundle; do
+          # Copy SwiftPM resource bundles (required for Bundle.module lookups).
+          # We search .build to avoid layout mismatches across toolchain versions.
+          BUNDLES="$(find .build -type d -name "*.bundle" | sort)"
+          if [[ -z "$BUNDLES" ]]; then
+            echo "No .bundle resources found in .build; failing packaging." >&2
+            exit 1
+          fi
+          while IFS= read -r bundle; do
             cp -R "$bundle" "$APP_DIR/Contents/Resources/"
-          done
+          done <<< "$BUNDLES"
 
           cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -70,26 +92,33 @@ jobs:
 
           codesign --force --deep --sign - "$APP_DIR"
 
+      - name: Verify bundled resources
+        run: |
+          set -euo pipefail
+          APP_DIR="dist/${APP_NAME}-debug.app"
+          ls -la "$APP_DIR/Contents/Resources"
+          test -d "$APP_DIR/Contents/Resources/pq-menubar_PQMenuBarApp.bundle"
+
       - name: Zip artifact
         run: |
           set -euo pipefail
           mkdir -p out
-          ditto -c -k --keepParent "dist/${APP_NAME}-debug.app" "out/${APP_NAME}-debug-${GITHUB_SHA}.zip"
+          ditto -c -k --keepParent "dist/${APP_NAME}-debug.app" "out/${{ steps.ver.outputs.zip }}"
           ls -lah out
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PQMenuBarApp-debug-${{ github.sha }}
-          path: out/PQMenuBarApp-debug-${{ github.sha }}.zip
+          name: ${{ steps.ver.outputs.tag }}
+          path: out/${{ steps.ver.outputs.zip }}
           if-no-files-found: error
 
       - name: Create debug release for commit
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: debug-${{ github.sha }}
-          name: Debug Build ${{ github.sha }}
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.name }}
           prerelease: true
           make_latest: false
           generate_release_notes: false
-          files: out/PQMenuBarApp-debug-${{ github.sha }}.zip
+          files: out/${{ steps.ver.outputs.zip }}
