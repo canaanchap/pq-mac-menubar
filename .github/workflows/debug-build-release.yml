@@ -1,0 +1,95 @@
+name: Debug Build + Release
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    env:
+      APP_NAME: PQMenuBarApp
+      BUNDLE_ID: com.canaan.pq-menubar.debug
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure scripts are executable
+        run: chmod +x ./scripts/dev-build.sh ./scripts/dev-setup.sh || true
+
+      - name: Build (debug)
+        run: ./scripts/dev-build.sh
+
+      - name: Locate debug binary
+        id: binpath
+        run: |
+          BIN_PATH="$(swift build -c debug --show-bin-path)"
+          echo "bin_path=$BIN_PATH" >> "$GITHUB_OUTPUT"
+          ls -la "$BIN_PATH"
+
+      - name: Package debug .app bundle
+        run: |
+          set -euo pipefail
+          BIN_PATH="${{ steps.binpath.outputs.bin_path }}"
+          APP_DIR="dist/${APP_NAME}-debug.app"
+          rm -rf "$APP_DIR"
+          mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+
+          cp "$BIN_PATH/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
+          chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
+
+          # Copy SwiftPM resource bundles, if present.
+          shopt -s nullglob
+          for bundle in "$BIN_PATH"/*.bundle; do
+            cp -R "$bundle" "$APP_DIR/Contents/Resources/"
+          done
+
+          cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>PQMenuBarApp</string>
+            <key>CFBundleDisplayName</key><string>PQMenuBarApp (Debug)</string>
+            <key>CFBundleIdentifier</key><string>com.canaan.pq-menubar.debug</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>CFBundleShortVersionString</key><string>1.0-debug</string>
+            <key>CFBundleExecutable</key><string>PQMenuBarApp</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>LSMinimumSystemVersion</key><string>15.0</string>
+            <key>LSUIElement</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          codesign --force --deep --sign - "$APP_DIR"
+
+      - name: Zip artifact
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          ditto -c -k --keepParent "dist/${APP_NAME}-debug.app" "out/${APP_NAME}-debug-${GITHUB_SHA}.zip"
+          ls -lah out
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PQMenuBarApp-debug-${{ github.sha }}
+          path: out/PQMenuBarApp-debug-${{ github.sha }}.zip
+          if-no-files-found: error
+
+      - name: Create debug release for commit
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-${{ github.sha }}
+          name: Debug Build ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false
+          files: out/PQMenuBarApp-debug-${{ github.sha }}.zip
