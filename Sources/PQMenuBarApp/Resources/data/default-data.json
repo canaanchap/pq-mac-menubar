@@ -1,5 +1,148 @@
 {
   "spells": [
+    "Bellpepper Benediction",
+    "Biscuit Bastion",
+    "Biscuit Blink",
+    "Bramblebounce",
+    "Bramblemurmur",
+    "Breezebop",
+    "Breezewhisper",
+    "Brio Bloom",
+    "Brisklebeam",
+    "Bumblebravo",
+    "Butterglide",
+    "Summon a Duck Named Jordan Stoneking",
+    "Buttonbloom",
+    "Candlecaprice",
+    "Candlequill",
+    "Chimneychuckle",
+    "Cinder Serenade",
+    "Cinnamon Circuit",
+    "Clovercloak",
+    "Summon Tiny Turtle",
+    "Cobbler’s Courage",
+    "Cobweb Cadence",
+    "Crayon Covenant",
+    "Cricket Chorus",
+    "Cricket’s Concord",
+    "Crispshimmer",
+    "Crumblecloud",
+    "Crumpet Charm",
+    "Crumpled Map Clarion",
+    "Cuckoo’s Courtesy",
+    "Dandelight",
+    "Dandelion Daze",
+    "Dawn Dabble",
+    "Dewdrop Duet",
+    "Drizzle Dapple",
+    "Duskdrizzle",
+    "Fablefizz",
+    "FUBAR",
+    "Featherflick",
+    "Featherproof",
+    "Frosted Fable",
+    "Frostwhistle",
+    "Gadgetglint",
+    "Gingersnap Glamour",
+    "Gleamglean",
+    "Glimmergather",
+    "Glimmergrin",
+    "Glimmerwink",
+    "Glowthimble",
+    "Gossamer Gait",
+    "Gossamer Gleam",
+    "Hearthhalo",
+    "Hearthhymn",
+    "Hearthskip",
+    "Hiccup Halo",
+    "Hiccup Hex (Friendly)",
+    "Honeyhush",
+    "Hushhollow",
+    "Hushpetal",
+    "Kettle Kaleidoscope",
+    "Kettlekindle",
+    "Lanternlace",
+    "Lanternlilt",
+    "Lemonslip",
+    "I-O-U",
+    "Lullabloom",
+    "Lullaby Lattice",
+    "Marblemend",
+    "Marmalade Mirage",
+    "Marzipan Mantle",
+    "Merrymask",
+    "Merryweather Mend",
+    "Minty Misdirection",
+    "Big, Gusty Wind",
+    "Moonmilk Motes",
+    "Moon And More Moon",
+    "Mothmirth",
+    "Mothveil",
+    "Murmurglow",
+    "Murmurmoor",
+    "Nettle Nimbus",
+    "Nimble Nudge",
+    "Nimbleknit",
+    "Nimbus Nibble",
+    "Noodle Nimbus",
+    "Oatmist",
+    "Paperboat Passage",
+    "Parchment Pirouette",
+    "Pebbleplume",
+    "Pennyprism",
+    "Lactose-free Milk Spray",
+    "Pillowplume",
+    "Pollen Parley",
+    "Poppycurl",
+    "Puddlepolish",
+    "Puddleprance",
+    "Puffpastry Protection",
+    "Quietquake",
+    "Quill & Quaver",
+    "Quillquake",
+    "Raisins of Revelation",
+    "Ribbon Rapture",
+    "Riddle Ribbon",
+    "RiddleRipple",
+    "Saffron Shift",
+    "Saffron Sunder",
+    "Satin Sigh",
+    "Scribbleshield",
+    "Snickerdoodle Sigil",
+    "Snickerstitch",
+    "Sockfinder’s Triumph",
+    "Sootsprite Summons",
+    "Sparrowspin",
+    "Spoonshine",
+    "Spoonspirit",
+    "Spriggan Spritz",
+    "Starlace",
+    "Starling’s Secret",
+    "Sundrift",
+    "Tanglethread",
+    "Tangletoes",
+    "Tattertale",
+    "Teacup Tempest",
+    "Thimble Thunder",
+    "Thistlebinder",
+    "Thistledrift",
+    "Tinsel Tongue",
+    "Tinselturn",
+    "Tinselward",
+    "Twinklethrum",
+    "Twinkletruce",
+    "Twirlyglyph",
+    "Velvet Vellum",
+    "Violet Vamoose",
+    "Waffle Ward",
+    "Wanderwax",
+    "Mediumer Lockjaw",
+    "Greater Lockjaw",
+    "Summon Dandelion",
+    "Whisperwell",
+    "Winkwarden",
+    "Wispwobble",
+    "Wobbleward",
     "Slime Finger",
     "Rabbit Punch",
     "Hastiness",
@@ -15,7 +158,7 @@
     "Aqueous Humor",
     "Spectral Miasma",
     "Clever Fellow",
-    "Lockjaw",
+    "Lesser Lockjaw",
     "History Lesson",
     "Hydrophobia",
     "Big Sister",
@@ -25,7 +168,7 @@
     "Holy Batpole",
     "Tumor (Benign)",
     "Braingate",
-    "Summon a Bitch",
+    "Summon a Crybaby",
     "Nonplus",
     "Animate Nightstand",
     "Eye of the Troglodyte",
@@ -130,6 +273,106 @@
     {
       "name": "Custom",
       "quality": 3
+    },
+    {
+      "name": "Reinforced",
+      "quality": 2
+    },
+    {
+      "name": "Quilted",
+      "quality": 1
+    },
+    {
+      "name": "Padded",
+      "quality": 1
+    },
+    {
+      "name": "Hardened",
+      "quality": 3
+    },
+    {
+      "name": "Tempered",
+      "quality": 4
+    },
+    {
+      "name": "Masterwork",
+      "quality": 5
+    },
+    {
+      "name": "Runed",
+      "quality": 4
+    },
+    {
+      "name": "Warded",
+      "quality": 5
+    },
+    {
+      "name": "Blessed",
+      "quality": 4
+    },
+    {
+      "name": "Sanctified",
+      "quality": 5
+    },
+    {
+      "name": "Enchanted",
+      "quality": 4
+    },
+    {
+      "name": "Spellbound",
+      "quality": 5
+    },
+    {
+      "name": "Insulated",
+      "quality": 2
+    },
+    {
+      "name": "Oiled",
+      "quality": 1
+    },
+    {
+      "name": "Lacquered",
+      "quality": 2
+    },
+    {
+      "name": "Etched",
+      "quality": 2
+    },
+    {
+      "name": "Embossed",
+      "quality": 3
+    },
+    {
+      "name": "Barbed",
+      "quality": 2
+    },
+    {
+      "name": "Scaled",
+      "quality": 3
+    },
+    {
+      "name": "Mirrorbright",
+      "quality": 3
+    },
+    {
+      "name": "Aegis",
+      "quality": 5
+    },
+    {
+      "name": "Stonebound",
+      "quality": 4
+    },
+    {
+      "name": "Dawnlit",
+      "quality": 4
+    },
+    {
+      "name": "Ironclad",
+      "quality": 4
+    },
+    {
+      "name": "Unyielding",
+      "quality": 5
     }
   ],
   "offenseBad": [
@@ -168,6 +411,46 @@
     {
       "name": "Unbalanced",
       "quality": -2
+    },
+    {
+      "name": "Blunt",
+      "quality": -2
+    },
+    {
+      "name": "Chipped",
+      "quality": -2
+    },
+    {
+      "name": "Cracked",
+      "quality": -3
+    },
+    {
+      "name": "Wobbly",
+      "quality": -3
+    },
+    {
+      "name": "Loose",
+      "quality": -4
+    },
+    {
+      "name": "Splintered",
+      "quality": -3
+    },
+    {
+      "name": "Warped",
+      "quality": -4
+    },
+    {
+      "name": "Dented",
+      "quality": -2
+    },
+    {
+      "name": "Flimsy",
+      "quality": -5
+    },
+    {
+      "name": "Toy",
+      "quality": -6
     }
   ],
   "defenseBad": [
@@ -226,6 +509,34 @@
     {
       "name": "Corroded",
       "quality": -3
+    },
+    {
+      "name": "Frayed",
+      "quality": -1
+    },
+    {
+      "name": "Ripped",
+      "quality": -3
+    },
+    {
+      "name": "Buckled",
+      "quality": -2
+    },
+    {
+      "name": "Brittle",
+      "quality": -3
+    },
+    {
+      "name": "Worn",
+      "quality": -1
+    },
+    {
+      "name": "Stained",
+      "quality": -1
+    },
+    {
+      "name": "Flimsy",
+      "quality": -4
     }
   ],
   "shields": [
@@ -374,6 +685,66 @@
     {
       "name": "Plasma",
       "quality": 30
+    },
+    {
+      "name": "Studded Leather",
+      "quality": 11
+    },
+    {
+      "name": "Lamellar",
+      "quality": 13
+    },
+    {
+      "name": "Brigandine",
+      "quality": 16
+    },
+    {
+      "name": "Half Plate",
+      "quality": 18
+    },
+    {
+      "name": "Plate Mail",
+      "quality": 20
+    },
+    {
+      "name": "Tempered Plate",
+      "quality": 22
+    },
+    {
+      "name": "Gilded Plate",
+      "quality": 24
+    },
+    {
+      "name": "Dwarven Steel",
+      "quality": 26
+    },
+    {
+      "name": "Mithril Weave",
+      "quality": 28
+    },
+    {
+      "name": "Dragonhide",
+      "quality": 30
+    },
+    {
+      "name": "Obsidian Shell",
+      "quality": 32
+    },
+    {
+      "name": "Runed Aegis",
+      "quality": 34
+    },
+    {
+      "name": "Astral Mantle",
+      "quality": 36
+    },
+    {
+      "name": "Voidplate",
+      "quality": 38
+    },
+    {
+      "name": "Celestial Plate",
+      "quality": 40
     }
   ],
   "weapons": [
@@ -532,6 +903,98 @@
     {
       "name": "Bandyclef",
       "quality": 15
+    },
+    {
+      "name": "Cudgel",
+      "quality": 2
+    },
+    {
+      "name": "Sap",
+      "quality": 2
+    },
+    {
+      "name": "Frying Pan",
+      "quality": 2
+    },
+    {
+      "name": "Quarterstaff",
+      "quality": 3
+    },
+    {
+      "name": "Sling",
+      "quality": 3
+    },
+    {
+      "name": "Cleaver",
+      "quality": 3
+    },
+    {
+      "name": "Warpick",
+      "quality": 4
+    },
+    {
+      "name": "Flail",
+      "quality": 4
+    },
+    {
+      "name": "Morningstar",
+      "quality": 4
+    },
+    {
+      "name": "Spear",
+      "quality": 4
+    },
+    {
+      "name": "Falchion",
+      "quality": 5
+    },
+    {
+      "name": "Scimitar",
+      "quality": 5
+    },
+    {
+      "name": "Rapier",
+      "quality": 5
+    },
+    {
+      "name": "Sabre",
+      "quality": 5
+    },
+    {
+      "name": "Glaive",
+      "quality": 6
+    },
+    {
+      "name": "Greatsword",
+      "quality": 7
+    },
+    {
+      "name": "Battleaxe",
+      "quality": 7
+    },
+    {
+      "name": "Maul",
+      "quality": 7
+    },
+    {
+      "name": "Hand Cannon",
+      "quality": 7
+    },
+    {
+      "name": "Runeblade",
+      "quality": 8
+    },
+    {
+      "name": "Starsteel Pike",
+      "quality": 8
+    },
+    {
+      "name": "Voidreaver",
+      "quality": 9
+    },
+    {
+      "name": "Sunforged Halberd",
+      "quality": 9
     }
   ],
   "specials": [
@@ -557,7 +1020,7 @@
     "Garnet",
     "Amethyst",
     "Candelabra",
-    "Corset",
+    "Ballcap",
     "Sphere",
     "Sceptre",
     "Ankh",
@@ -720,7 +1183,7 @@
     {
       "name": "Ape",
       "level": 4,
-      "item": "ass"
+      "item": "kneecap"
     },
     {
       "name": "Baluchitherium",
@@ -840,7 +1303,7 @@
     {
       "name": "Succubus",
       "level": 6,
-      "item": "bra"
+      "item": "horn"
     },
     {
       "name": "Vrock",
@@ -905,7 +1368,7 @@
     {
       "name": "Erinyes",
       "level": 6,
-      "item": "thong"
+      "item": "ankle"
     },
     {
       "name": "Geryon",
@@ -1113,9 +1576,9 @@
       "item": "bit"
     },
     {
-      "name": "Porn Elemental",
+      "name": "Shy Elemental",
       "level": 12,
-      "item": "lube"
+      "item": "cotton"
     },
     {
       "name": "Cheese Elemental",
@@ -1295,7 +1758,7 @@
     {
       "name": "Gorgon",
       "level": 8,
-      "item": "testicle"
+      "item": "forearm"
     },
     {
       "name": "Gray Ooze",
@@ -1375,7 +1838,7 @@
     {
       "name": "Kobold",
       "level": 1,
-      "item": "penis"
+      "item": "chin"
     },
     {
       "name": "Leprechaun",
@@ -1705,7 +2168,7 @@
     {
       "name": "Trapper",
       "level": 12,
-      "item": "shag"
+      "item": "fur"
     },
     {
       "name": "Treant",
@@ -1850,7 +2313,7 @@
     {
       "name": "Moakum",
       "level": 8,
-      "item": "frenum"
+      "item": "scalp"
     },
     {
       "name": "Fly",
@@ -1951,7 +2414,7 @@
       ]
     },
     {
-      "name": "Trans-Kobold",
+      "name": "Meta-Kobold",
       "attr": [
         "WIS"
       ]
@@ -2093,7 +2556,7 @@
       ]
     },
     {
-      "name": "Bastard Lunatic",
+      "name": "Scoundrel Lunatic",
       "attr": [
         "CON"
       ]
@@ -2126,7 +2589,17 @@
     "Captain",
     "Chief",
     "Admiral",
-    "Saint"
+    "Saint",
+    "Magister",
+    "Dame",
+    "Baron",
+    "Countess",
+    "Warden",
+    "Provost",
+    "Chancellor",
+    "Archon",
+    "Marquis",
+    "Oracle"
   ],
   "impressiveTitles": [
     "King",
@@ -2139,7 +2612,27 @@
     "Princess",
     "Chief",
     "Boss",
-    "Archbishop"
+    "Archbishop",
+    "Emperor",
+    "Empress",
+    "Duke",
+    "Duchess",
+    "High Chancellor",
+    "Grand Marshal",
+    "Supreme Commander",
+    "Archduke",
+    "Archduchess",
+    "Patriarch",
+    "Matriarch",
+    "High Priest",
+    "High Priestess",
+    "Warlord",
+    "Overseer",
+    "Steward",
+    "Regent",
+    "Grandmaster",
+    "Elder",
+    "Sovereign"
   ],
   "primeStats": [
     "STR",
