@@ -235,6 +235,54 @@
     {
       "name": "Vorpal",
       "quality": 7
+    },
+    {
+      "name": "Razor",
+      "quality": 1
+    },
+    {
+      "name": "Weighted",
+      "quality": 1
+    },
+    {
+      "name": "Spiked",
+      "quality": 1
+    },
+    {
+      "name": "Barbed",
+      "quality": 2
+    },
+    {
+      "name": "Tempered",
+      "quality": 2
+    },
+    {
+      "name": "Savage",
+      "quality": 3
+    },
+    {
+      "name": "Rending",
+      "quality": 3
+    },
+    {
+      "name": "Thunderous",
+      "quality": 4
+    },
+    {
+      "name": "Runebound",
+      "quality": 4
+    },
+    {
+      "name": "Soulpiercing",
+      "quality": 5
+    },
+    {
+      "name": "Cataclysmic",
+      "quality": 6
+    },
+    {
+      "name": "Doomforged",
+      "quality": 7
     }
   ],
   "defenseAttrib": [
@@ -603,6 +651,62 @@
     {
       "name": "Magnetic Field",
       "quality": 18
+    },
+    {
+      "name": "Wooden Lid",
+      "quality": 1
+    },
+    {
+      "name": "Wicker Guard",
+      "quality": 2
+    },
+    {
+      "name": "Kite Buckler",
+      "quality": 4
+    },
+    {
+      "name": "Heater Shield",
+      "quality": 5
+    },
+    {
+      "name": "Targe",
+      "quality": 6
+    },
+    {
+      "name": "Pavise Plate",
+      "quality": 7
+    },
+    {
+      "name": "Iron Wall",
+      "quality": 8
+    },
+    {
+      "name": "Tower Guard",
+      "quality": 9
+    },
+    {
+      "name": "Aegis Plate",
+      "quality": 10
+    },
+    {
+      "name": "Runed Barrier",
+      "quality": 12
+    },
+    {
+      "name": "Dragon Shell",
+      "quality": 14
+    },
+    {
+      "name": "Mythril Bulwark",
+      "quality": 16
+    },
+    {
+      "name": "Obsidian Ward",
+      "quality": 18
+    },
+    {
+      "name": "Prismatic Guard",
+      "quality": 20
     }
   ],
   "armors": [
@@ -997,7 +1101,7 @@
       "quality": 9
     }
   ],
-  "specials": [
+    "specials": [
     "Diadem",
     "Festoon",
     "Gemstone",
@@ -1020,7 +1124,7 @@
     "Garnet",
     "Amethyst",
     "Candelabra",
-    "Ballcap",
+    "Ball Cap",
     "Sphere",
     "Sceptre",
     "Ankh",
@@ -1034,9 +1138,32 @@
     "Spangle",
     "Gimcrack",
     "Hood",
-    "Vulpeculum"
+    "Vulpeculum",
+    "Charm",
+    "Relic",
+    "Sigil",
+    "Medallion",
+    "Idol",
+    "Totem",
+    "Urn",
+    "Crown",
+    "Circlet",
+    "Gauntlet",
+    "Bracer",
+    "Mantle",
+    "Scepter",
+    "Standard",
+    "Vial",
+    "Parchment",
+    "Codex",
+    "Carillon",
+    "Aegis",
+    "Gorget",
+    "Locket",
+    "Monocle",
+    "Hourglass"
   ],
-  "itemAttrib": [
+"itemAttrib": [
     "Golden",
     "Gilded",
     "Spectral",
@@ -1069,7 +1196,31 @@
     "Magnificent",
     "Iron",
     "Ormolu",
-    "Puissant"
+    "Puissant",
+    "Runed",
+    "Eldritch",
+    "Moonlit",
+    "Sunforged",
+    "Starbound",
+    "Stormkissed",
+    "Frostbitten",
+    "Emberwrought",
+    "Voidtouched",
+    "Dreamwoven",
+    "Hexed",
+    "Hallowed",
+    "Ancient",
+    "Prismatic",
+    "Shimmering",
+    "Obsidian",
+    "Ivory",
+    "Verdant",
+    "Clockwork",
+    "Dragonforged",
+    "Seraphic",
+    "Infernal",
+    "Titanic",
+    "Whispering"
   ],
   "itemOfs": [
     "Foreboding",
@@ -1123,7 +1274,30 @@
     "the Bone",
     "Diamonique",
     "Electrum",
-    "Hydragyrum"
+    "Hydragyrum",
+    "Whispers",
+    "Portents",
+    "Resolve",
+    "Calm",
+    "Haste",
+    "Audacity",
+    "Dread",
+    "Clarity",
+    "Momentum",
+    "Stillness",
+    "Prudence",
+    "Vigor",
+    "Mirth",
+    "Defiance",
+    "Discord",
+    "Perseverance",
+    "Radiance",
+    "Cunning",
+    "Tenacity",
+    "Wonder",
+    "Temperance",
+    "Focus",
+    "Echoes"
   ],
   "boringItems": [
     "nail",
@@ -1167,7 +1341,36 @@
     "nosegay",
     "trinket",
     "credenza",
-    "writ"
+    "writ",
+    "paperclip",
+    "teaspoon",
+    "shoelace",
+    "button",
+    "receipt",
+    "postcard",
+    "envelope",
+    "rubber band",
+    "thumbtack",
+    "spool",
+    "thimble",
+    "mug",
+    "coaster",
+    "napkin",
+    "dishrag",
+    "matchbook",
+    "soap",
+    "comb",
+    "keyring",
+    "bookmark",
+    "cork",
+    "jar lid",
+    "clothespin",
+    "measuring tape",
+    "flashlight",
+    "notepad",
+    "ruler",
+    "paintbrush",
+    "garden glove"
   ],
   "monsters": [
     {
@@ -1183,7 +1386,7 @@
     {
       "name": "Ape",
       "level": 4,
-      "item": "kneecap"
+      "item": "ass"
     },
     {
       "name": "Baluchitherium",
@@ -1303,7 +1506,7 @@
     {
       "name": "Succubus",
       "level": 6,
-      "item": "horn"
+      "item": "ankle"
     },
     {
       "name": "Vrock",
@@ -1368,7 +1571,7 @@
     {
       "name": "Erinyes",
       "level": 6,
-      "item": "ankle"
+      "item": "toe bone"
     },
     {
       "name": "Geryon",
@@ -1576,9 +1779,9 @@
       "item": "bit"
     },
     {
-      "name": "Shy Elemental",
+      "name": "Porn Elemental",
       "level": 12,
-      "item": "cotton"
+      "item": "lube"
     },
     {
       "name": "Cheese Elemental",
@@ -1758,7 +1961,7 @@
     {
       "name": "Gorgon",
       "level": 8,
-      "item": "forearm"
+      "item": "testicle"
     },
     {
       "name": "Gray Ooze",
@@ -1838,7 +2041,7 @@
     {
       "name": "Kobold",
       "level": 1,
-      "item": "chin"
+      "item": "penis"
     },
     {
       "name": "Leprechaun",
@@ -2168,7 +2371,7 @@
     {
       "name": "Trapper",
       "level": 12,
-      "item": "fur"
+      "item": "shag"
     },
     {
       "name": "Treant",
@@ -2313,7 +2516,7 @@
     {
       "name": "Moakum",
       "level": 8,
-      "item": "scalp"
+      "item": "frenum"
     },
     {
       "name": "Fly",
@@ -2329,6 +2532,131 @@
       "name": "Wolog",
       "level": 4,
       "item": "lemma"
+    },
+    {
+      "name": "Barbed Imp",
+      "level": 4,
+      "item": "stinger"
+    },
+    {
+      "name": "Ash Warden",
+      "level": 8,
+      "item": "cinder"
+    },
+    {
+      "name": "Brimstone Hound",
+      "level": 7,
+      "item": "fang"
+    },
+    {
+      "name": "Cinder Witch",
+      "level": 10,
+      "item": "candle"
+    },
+    {
+      "name": "Dread Minotaur",
+      "level": 12,
+      "item": "horn"
+    },
+    {
+      "name": "Ebon Seraph",
+      "level": 16,
+      "item": "feather"
+    },
+    {
+      "name": "Frost Revenant",
+      "level": 11,
+      "item": "shard"
+    },
+    {
+      "name": "Gloom Basilisk",
+      "level": 14,
+      "item": "scale"
+    },
+    {
+      "name": "Hellkite",
+      "level": 18,
+      "item": "spike"
+    },
+    {
+      "name": "Iron Behemoth",
+      "level": 20,
+      "item": "bolt"
+    },
+    {
+      "name": "Jade Manticore",
+      "level": 15,
+      "item": "barb"
+    },
+    {
+      "name": "Kraken Spawn",
+      "level": 17,
+      "item": "beak"
+    },
+    {
+      "name": "Lich Herald",
+      "level": 22,
+      "item": "phylactery"
+    },
+    {
+      "name": "Mire Colossus",
+      "level": 19,
+      "item": "clod"
+    },
+    {
+      "name": "Nether Chimera",
+      "level": 21,
+      "item": "mane"
+    },
+    {
+      "name": "Obsidian Gargoyle",
+      "level": 13,
+      "item": "chip"
+    },
+    {
+      "name": "Plague Roc",
+      "level": 12,
+      "item": "plume"
+    },
+    {
+      "name": "Quartz Golem",
+      "level": 9,
+      "item": "geode"
+    },
+    {
+      "name": "Rift Hydra",
+      "level": 24,
+      "item": "neck"
+    },
+    {
+      "name": "Storm Cyclops",
+      "level": 18,
+      "item": "lens"
+    },
+    {
+      "name": "Thorn Abomination",
+      "level": 10,
+      "item": "seedpod"
+    },
+    {
+      "name": "Umbral Leviathan",
+      "level": 27,
+      "item": "fin"
+    },
+    {
+      "name": "Void Harpy",
+      "level": 8,
+      "item": "talon"
+    },
+    {
+      "name": "Wyrm Patriarch",
+      "level": 30,
+      "item": "tooth"
+    },
+    {
+      "name": "Zephyr Djinn",
+      "level": 14,
+      "item": "bottle"
     }
   ],
   "races": [
@@ -2556,7 +2884,7 @@
       ]
     },
     {
-      "name": "Scoundrel Lunatic",
+      "name": "Subpar Lunatic",
       "attr": [
         "CON"
       ]

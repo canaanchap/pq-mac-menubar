@@ -358,6 +358,7 @@ struct DashboardView: View {
 
                             Button("Load and Start") {
                                 appState.loadAndStartSelectedCharacter()
+                                selectedTab = .overview
                             }
                             .disabled(appState.selectedCharacterID == nil)
                         }
