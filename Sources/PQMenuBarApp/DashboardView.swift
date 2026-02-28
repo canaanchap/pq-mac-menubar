@@ -17,6 +17,15 @@ struct DashboardView: View {
         case settings
     }
 
+    private enum OverviewPanel: CaseIterable, Hashable {
+        case characterSheet
+        case equipment
+        case plotDevelopment
+        case spellBook
+        case inventory
+        case quests
+    }
+
     @EnvironmentObject var appState: AppState
     @State private var apiKeyDraft: String = ""
     @State private var showDeleteAPIKeyAlert: Bool = false
@@ -26,6 +35,10 @@ struct DashboardView: View {
     @State private var debugTickEdited: Bool = false
     @State private var showDebugSummary: Bool = false
     @State private var visualTestMode: VisualTestMode?
+    @State private var overviewMaskEnabled: Bool = false
+    @State private var overviewMaskVisible: Bool = false
+    @State private var readyOverviewPanels: Set<OverviewPanel> = Set(OverviewPanel.allCases)
+    @State private var reentryMaskTask: Task<Void, Never>?
 
     private let tickRateOptions: [Double] = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
 
@@ -45,13 +58,35 @@ struct DashboardView: View {
         }
         .frame(minWidth: 980, minHeight: 650)
         .onAppear {
+            overviewMaskEnabled = appState.betaReentryLoadMaskEnabled
             installKeyboardMonitorIfNeeded()
             applyRequestedTab()
+            if selectedTab == .overview {
+                triggerOverviewReentryMaskIfNeeded()
+            }
         }
         .onChange(of: appState.dashboardRouteToken) { _, _ in
             applyRequestedTab()
         }
-        .onDisappear { removeKeyboardMonitor() }
+        .onChange(of: selectedTab) { _, newTab in
+            if newTab == .overview {
+                triggerOverviewReentryMaskIfNeeded()
+            } else {
+                stopReentryMask()
+            }
+        }
+        .onChange(of: appState.betaReentryLoadMaskEnabled) { _, enabled in
+            overviewMaskEnabled = enabled
+            if selectedTab == .overview {
+                triggerOverviewReentryMaskIfNeeded()
+            } else {
+                stopReentryMask()
+            }
+        }
+        .onDisappear {
+            removeKeyboardMonitor()
+            stopReentryMask()
+        }
         .overlay(alignment: .top) {
             if let msg = appState.statusMessage {
                 Text(msg)
@@ -123,6 +158,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(minWidth: 265, maxWidth: 300)
+                .overlay { overviewPanelMask(.characterSheet) }
 
                 panel("Equipment") {
                     VStack(alignment: .leading, spacing: 1) {
@@ -137,6 +173,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(minWidth: 420, maxWidth: .infinity)
+                .overlay { overviewPanelMask(.equipment) }
 
                 panel("Plot Development") {
                     VStack(alignment: .leading, spacing: 2) {
@@ -159,6 +196,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(minWidth: 190, maxWidth: 220)
+                .overlay { overviewPanelMask(.plotDevelopment) }
             }
 
             HStack(alignment: .top, spacing: 8) {
@@ -180,6 +218,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(minWidth: 265, maxWidth: 300)
+                .overlay { overviewPanelMask(.spellBook) }
 
                 panel("Inventory") {
                     VStack(alignment: .leading, spacing: 2) {
@@ -205,6 +244,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(minWidth: 300, maxWidth: 340)
+                .overlay { overviewPanelMask(.inventory) }
 
                 panel("Quests") {
                     VStack(alignment: .leading, spacing: 2) {
@@ -226,6 +266,7 @@ struct DashboardView: View {
                     }
                 }
                 .frame(minWidth: 290, maxWidth: .infinity)
+                .overlay { overviewPanelMask(.quests) }
             }
 
             panel(nil) {
@@ -406,21 +447,42 @@ struct DashboardView: View {
                 }
 
                 GroupBox("Data + Paths") {
-                    HStack(alignment: .top, spacing: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            pathRow("Data", appState.dataDirectory.data)
-                            pathRow("Mods", appState.dataDirectory.mods)
-                            pathRow("Saves", appState.dataDirectory.saves)
-                            pathRow("Logs", appState.dataDirectory.logs)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Button("Reload Data (+Mods)") {
+                                appState.reloadDataAndMods()
+                            }
+                            Spacer()
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        HStack(alignment: .top, spacing: 20) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                pathRow("Data", appState.dataDirectory.data)
+                                pathRow("Mods", appState.dataDirectory.mods)
+                                pathRow("Saves", appState.dataDirectory.saves)
+                                pathRow("Logs", appState.dataDirectory.logs)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Divider()
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                loadedDataTwoColumns
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
 
                         Divider()
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            loadedDataTwoColumns
+                        Text("Validation Report")
+                            .font(.subheadline.weight(.semibold))
+                        ScrollView {
+                            Text(appState.dataValidationReport)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(minHeight: 120, maxHeight: 180)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
             }
@@ -636,6 +698,11 @@ struct DashboardView: View {
 
                 GroupBox("Visuals") {
                     VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Beta re-entry load mask", isOn: Binding(
+                            get: { appState.betaReentryLoadMaskEnabled },
+                            set: { appState.betaReentryLoadMaskEnabled = $0 }
+                        ))
+                        .toggleStyle(.switch)
                         Button(VisualTestMode.liveRaw.rawValue) {
                             visualTestMode = .liveRaw
                         }
@@ -730,6 +797,45 @@ struct DashboardView: View {
         }
     }
 
+    private func triggerOverviewReentryMaskIfNeeded() {
+        guard overviewMaskEnabled else {
+            stopReentryMask()
+            return
+        }
+
+        reentryMaskTask?.cancel()
+        overviewMaskVisible = true
+        readyOverviewPanels = []
+
+        reentryMaskTask = Task { @MainActor in
+            let reveals = OverviewPanel.allCases
+                .map { ($0, Double.random(in: 0.10...0.24)) }
+                .sorted { $0.1 < $1.1 }
+            var elapsed: Double = 0
+            for (panel, delay) in reveals {
+                let wait = max(0, delay - elapsed)
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                _ = withAnimation(.easeOut(duration: 0.08)) {
+                    readyOverviewPanels.insert(panel)
+                }
+                elapsed = delay
+            }
+            guard !Task.isCancelled else { return }
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            withAnimation(.easeOut(duration: 0.06)) {
+                overviewMaskVisible = false
+            }
+        }
+    }
+
+    private func stopReentryMask() {
+        reentryMaskTask?.cancel()
+        reentryMaskTask = nil
+        overviewMaskVisible = false
+        readyOverviewPanels = Set(OverviewPanel.allCases)
+    }
+
     private func encumbrance(_ p: PlayerState) -> Int {
         p.inventoryItems.reduce(0) { $0 + $1.quantity }
     }
@@ -749,6 +855,19 @@ struct DashboardView: View {
             return AnyView(Text(value))
         }
         return AnyView(Text("(none)").foregroundStyle(.tertiary))
+    }
+
+    @ViewBuilder
+    private func overviewPanelMask(_ panel: OverviewPanel) -> some View {
+        if overviewMaskVisible && !readyOverviewPanels.contains(panel) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.gray.opacity(0.18))
+                ProgressView()
+                    .controlSize(.small)
+            }
+            .transition(.opacity)
+        }
     }
 }
 

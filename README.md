@@ -2,6 +2,11 @@
 
 A port (plus more) of 2002's Progress Quest. I want to "play" on my Mac, so here we are!
 
+*Note to me:
+To run a dev build:
+`./scripts/dev-build.sh`
+`swift run PQMenuBarApp`
+
 Inspired by: http://progressquest.com/
 Started from: https://bitbucket.org/grumdrig/pq
 

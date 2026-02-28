@@ -17,6 +17,7 @@ struct PopoverView: View {
     @State private var newCharacterRace: String = ""
     @State private var newCharacterClass: String = ""
     @State private var rolledStats: Stats?
+    @State private var previousRolledStats: Stats?
 
     var body: some View {
         if appState.sessionStarted {
@@ -142,8 +143,15 @@ struct PopoverView: View {
 
             HStack {
                 Button("Roll") {
+                    previousRolledStats = rolledStats
                     rolledStats = appState.rollStats()
                 }
+                Button("Unroll") {
+                    guard let previousRolledStats else { return }
+                    rolledStats = previousRolledStats
+                    self.previousRolledStats = nil
+                }
+                .disabled(previousRolledStats == nil)
                 Button("Create") {
                     let name = newCharacterName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let finalName = name.isEmpty ? "Hero \(Int.random(in: 100...999))" : name
@@ -154,9 +162,11 @@ struct PopoverView: View {
                         stats: rolledStats
                     )
                     creatingCharacter = false
+                    previousRolledStats = nil
                 }
                 Button("Cancel") {
                     creatingCharacter = false
+                    previousRolledStats = nil
                 }
             }
         }
@@ -238,6 +248,7 @@ struct PopoverView: View {
             newCharacterClass = appState.dataBundle.classes.first?.name ?? "Ur-Paladin"
         }
         rolledStats = appState.rollStats()
+        previousRolledStats = nil
         creatingCharacter = true
     }
 

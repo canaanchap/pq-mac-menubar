@@ -93,6 +93,12 @@ public final class GameRuntime {
         }
     }
 
+    public func setDataBundle(_ data: PQDataBundle) {
+        queue.async {
+            self.engine = TickEngine(data: data)
+        }
+    }
+
     private func performTick() {
         let previous = state
         let now = Date()

@@ -8,6 +8,28 @@ private struct RosterFile: Codable {
     var characters: [PlayerState]
 }
 
+private struct ModPatchBundle: Codable {
+    var spells: [String]?
+    var offenseAttrib: [Modifier]?
+    var defenseAttrib: [Modifier]?
+    var offenseBad: [Modifier]?
+    var defenseBad: [Modifier]?
+    var shields: [EquipmentPreset]?
+    var armors: [EquipmentPreset]?
+    var weapons: [EquipmentPreset]?
+    var specials: [String]?
+    var itemAttrib: [String]?
+    var itemOfs: [String]?
+    var boringItems: [String]?
+    var monsters: [MonsterDef]?
+    var races: [RaceDef]?
+    var classes: [ClassDef]?
+    var titles: [String]?
+    var impressiveTitles: [String]?
+    var primeStats: [String]?
+    var equipmentTypes: [String]?
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var state: GameState
@@ -25,6 +47,12 @@ final class AppState: ObservableObject {
     @Published var statusMessage: String?
     @Published var dashboardRequestedTab: String = "overview"
     @Published var dashboardRouteToken: Int = 0
+    @Published var dataValidationReport: String = "No validation run yet."
+    @Published var betaReentryLoadMaskEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(betaReentryLoadMaskEnabled, forKey: Self.betaReentryMaskDefaultsKey)
+        }
+    }
     @Published var portraitImageURL: URL?
     @Published var openAIAPIKey: String {
         didSet {
@@ -41,7 +69,7 @@ final class AppState: ObservableObject {
     let saveStore: SaveStore
     let logStore: EventLogStore
     let runtime: GameRuntime
-    let dataBundle: PQDataBundle
+    @Published var dataBundle: PQDataBundle
 
     private let rosterURL: URL
     private let portraitsURL: URL
@@ -49,6 +77,7 @@ final class AppState: ObservableObject {
     private static let openAIAPIKeyDefaultsKey = "pq.openai.apiKey"
     private static let tickRateDefaultsKey = "pq.runtime.tickRate"
     private static let persistentDashboardWindowDefaultsKey = "pq.dashboard.persistentWindow"
+    private static let betaReentryMaskDefaultsKey = "pq.debug.betaReentryMask"
     private var portraitGenerationInFlightCharacterIDs: Set<UUID> = []
     private var lastSeenLevelByCharacterID: [UUID: Int] = [:]
     private var logArchiveTimer: DispatchSourceTimer?
@@ -66,26 +95,29 @@ final class AppState: ObservableObject {
             let savedTickRate = UserDefaults.standard.double(forKey: Self.tickRateDefaultsKey)
             tickRateMultiplier = savedTickRate > 0 ? savedTickRate : 1.0
             persistentDashboardWindow = UserDefaults.standard.bool(forKey: Self.persistentDashboardWindowDefaultsKey)
+            betaReentryLoadMaskEnabled = UserDefaults.standard.bool(forKey: Self.betaReentryMaskDefaultsKey)
 
             let userDataURL = dataDirectory.data.appendingPathComponent("default-data.json")
             try Self.ensureDefaultData(at: userDataURL)
-            dataBundle = try PQDataLoader.load(from: userDataURL)
+            let initialDataBundle = try PQDataLoader.load(from: userDataURL)
+            dataBundle = initialDataBundle
+            dataValidationReport = Self.buildValidationReport(for: initialDataBundle, modFiles: [], warnings: [])
             portraitPromptTemplateURL = dataDirectory.data.appendingPathComponent("portrait-prompt.txt")
             try Self.ensurePortraitPromptTemplate(at: portraitPromptTemplateURL)
 
-            let loaded = try Self.loadRoster(from: rosterURL, saveStore: saveStore, data: dataBundle)
+            let loaded = try Self.loadRoster(from: rosterURL, saveStore: saveStore, data: initialDataBundle)
             roster = loaded.characters
             selectedCharacterID = nil
             sessionStarted = false
             statusMessage = nil
             portraitImageURL = nil
 
-            let initialCharacter = loaded.characters.first ?? Self.defaultCharacter(from: dataBundle)
+            let initialCharacter = loaded.characters.first ?? Self.defaultCharacter(from: initialDataBundle)
             let initialState = GameState(activeCharacter: initialCharacter, isPaused: true)
             state = initialState
             events = []
 
-            runtime = GameRuntime(initialState: initialState, data: dataBundle, saveStore: saveStore, logStore: logStore)
+            runtime = GameRuntime(initialState: initialState, data: initialDataBundle, saveStore: saveStore, logStore: logStore)
             runtime.setTickRateMultiplier(tickRateMultiplier)
             startLogArchiveTimer()
 
@@ -254,6 +286,29 @@ final class AppState: ObservableObject {
         dashboardRouteToken &+= 1
     }
 
+    func reloadDataAndMods() {
+        flash("Reloading data...")
+        let dataURL = dataDirectory.data.appendingPathComponent("default-data.json")
+        let modsURL = dataDirectory.mods
+
+        Task.detached(priority: .utility) {
+            do {
+                let (bundle, modFiles, warnings) = try Self.loadDataWithMods(baseURL: dataURL, modsDirectory: modsURL)
+                let report = Self.buildValidationReport(for: bundle, modFiles: modFiles, warnings: warnings)
+                await MainActor.run {
+                    self.dataBundle = bundle
+                    self.runtime.setDataBundle(bundle)
+                    self.dataValidationReport = report
+                    self.flash("Data reloaded (\(modFiles.count) mod file\(modFiles.count == 1 ? "" : "s")).")
+                }
+            } catch {
+                await MainActor.run {
+                    self.flash("Reload failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     func togglePause() {
         guard sessionStarted else { return }
         let next = !state.isPaused
@@ -393,29 +448,24 @@ final class AppState: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            let importedNames: [String]
-            if url.pathExtension.lowercased() == "json" {
-                importedNames = try importFromJSON(url)
-            } else {
-                let raw = try Data(contentsOf: url)
-                if let webData = Self.decodeWebsitePayload(from: raw),
-                   let webPlayer = try decodeWebsiteExportPlayer(from: webData) {
-                    mergeImportedCharacter(webPlayer)
-                    importedNames = [webPlayer.name]
-                } else {
-                    let imported = try importLegacyCharacterFile(url)
-                    importedNames = try importFromJSON(imported)
-                }
+            let importedPlayers = try parseImportedPlayers(from: url)
+            guard !importedPlayers.isEmpty else {
+                flash("Import failed: file contains no players.")
+                return
             }
-            let names = importedNames.joined(separator: ", ")
-            flash("Imported: \(names)")
-            if !importedNames.isEmpty {
-                let shouldStart = NSAlert.runAskYesNo(
-                    title: "Start imported character?",
-                    message: "Start \(importedNames.first ?? "character") now?"
-                )
-                if shouldStart, !sessionStarted {
-                    startSelectedCharacter()
+
+            let decision = showImportPreview(players: importedPlayers, sourceFilename: url.lastPathComponent)
+            switch decision {
+            case .cancel:
+                return
+            case .importToRosterOnly:
+                importedPlayers.forEach { mergeImportedCharacter($0) }
+                flash("Imported \(importedPlayers.count) character(s) to roster.")
+            case .importAndStart:
+                importedPlayers.forEach { mergeImportedCharacter($0) }
+                if let first = importedPlayers.first {
+                    selectedCharacterID = first.id
+                    loadAndStartSelectedCharacter()
                 }
             }
         } catch {
@@ -463,32 +513,53 @@ final class AppState: ObservableObject {
     @discardableResult
     private func importFromJSON(_ url: URL) throws -> [String] {
         let data = try Data(contentsOf: url)
+        let players = try parsePlayersFromJSONData(data)
+        for player in players {
+            mergeImportedCharacter(player)
+        }
+        return players.map(\.name)
+    }
+
+    private func parseImportedPlayers(from url: URL) throws -> [PlayerState] {
+        if url.pathExtension.lowercased() == "json" {
+            let data = try Data(contentsOf: url)
+            return try parsePlayersFromJSONData(data)
+        }
+
+        let raw = try Data(contentsOf: url)
+        if let webData = Self.decodeWebsitePayload(from: raw),
+           let webPlayer = try decodeWebsiteExportPlayer(from: webData) {
+            return [webPlayer]
+        }
+
+        let imported = try importLegacyCharacterFile(url)
+        let data = try Data(contentsOf: imported)
+        return try parsePlayersFromJSONData(data)
+    }
+
+    private func parsePlayersFromJSONData(_ data: Data) throws -> [PlayerState] {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
         if let gameState = try? decoder.decode(GameState.self, from: data) {
-            mergeImportedCharacter(gameState.activeCharacter)
-            return [gameState.activeCharacter.name]
+            return [gameState.activeCharacter]
         }
 
         if let player = try? decoder.decode(PlayerState.self, from: data) {
-            mergeImportedCharacter(player)
-            return [player.name]
+            return [player]
         }
 
         if let imported = try? decoder.decode(ImportedPayload.self, from: data) {
-            var names: [String] = []
+            var players: [PlayerState] = []
             for p in imported.players {
                 let player = p.toPlayerState(defaultData: dataBundle)
-                mergeImportedCharacter(player)
-                names.append(player.name)
+                players.append(player)
             }
-            return names
+            return players
         }
 
         if let webPlayer = try decodeWebsiteExportPlayer(from: data) {
-            mergeImportedCharacter(webPlayer)
-            return [webPlayer.name]
+            return [webPlayer]
         }
 
         throw NSError(
@@ -515,6 +586,46 @@ final class AppState: ObservableObject {
         try payload.write(to: url, options: .atomic)
     }
 
+    private enum ImportDecision {
+        case importAndStart
+        case importToRosterOnly
+        case cancel
+    }
+
+    private func showImportPreview(players: [PlayerState], sourceFilename: String) -> ImportDecision {
+        let alert = NSAlert()
+        alert.messageText = "Import Preview"
+        alert.informativeText = importPreviewText(players: players, sourceFilename: sourceFilename)
+        alert.addButton(withTitle: "Import and Start")
+        alert.addButton(withTitle: "Import To Roster Only")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .importAndStart
+        case .alertSecondButtonReturn: return .importToRosterOnly
+        default: return .cancel
+        }
+    }
+
+    private func importPreviewText(players: [PlayerState], sourceFilename: String) -> String {
+        guard let first = players.first else { return "No player found in \(sourceFilename)." }
+        let quest = first.questBook.currentQuest ?? "-"
+        let task = (first.task?.description ?? "-") + "..."
+        var lines: [String] = [
+            "Source: \(sourceFilename)",
+            "Characters in file: \(players.count)",
+            "",
+            "\(first.name)",
+            "Lv \(first.level) • \(first.race) \(first.characterClass)",
+            "Quest: \(quest)",
+            "Task: \(task)"
+        ]
+        if players.count > 1 {
+            lines.append("")
+            lines.append("Additional: \(players.dropFirst().map(\.name).joined(separator: ", "))")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private func mergeImportedCharacter(_ c: PlayerState) {
         if let idx = roster.firstIndex(where: { $0.id == c.id }) {
             roster[idx] = c
@@ -537,6 +648,87 @@ final class AppState: ObservableObject {
             throw NSError(domain: "pq-menubar", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing convert_pkl.py"])
         }
         return LegacyPKLBridge(converterPath: converter)
+    }
+
+    nonisolated private static func loadDataWithMods(baseURL: URL, modsDirectory: URL) throws -> (PQDataBundle, [String], [String]) {
+        var bundle = try PQDataLoader.load(from: baseURL)
+        let fm = FileManager.default
+        let modURLs = (try? fm.contentsOfDirectory(at: modsDirectory, includingPropertiesForKeys: nil))?
+            .filter { $0.pathExtension.lowercased() == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
+
+        var warnings: [String] = []
+        var modNames: [String] = []
+        let decoder = JSONDecoder()
+        for modURL in modURLs {
+            do {
+                let data = try Data(contentsOf: modURL)
+                let patch = try decoder.decode(ModPatchBundle.self, from: data)
+                bundle = merge(base: bundle, patch: patch)
+                modNames.append(modURL.lastPathComponent)
+            } catch {
+                warnings.append("Skipped \(modURL.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+        return (bundle, modNames, warnings)
+    }
+
+    nonisolated private static func merge(base: PQDataBundle, patch: ModPatchBundle) -> PQDataBundle {
+        var out = base
+        out.spells.append(contentsOf: patch.spells ?? [])
+        out.offenseAttrib.append(contentsOf: patch.offenseAttrib ?? [])
+        out.defenseAttrib.append(contentsOf: patch.defenseAttrib ?? [])
+        out.offenseBad.append(contentsOf: patch.offenseBad ?? [])
+        out.defenseBad.append(contentsOf: patch.defenseBad ?? [])
+        out.shields.append(contentsOf: patch.shields ?? [])
+        out.armors.append(contentsOf: patch.armors ?? [])
+        out.weapons.append(contentsOf: patch.weapons ?? [])
+        out.specials.append(contentsOf: patch.specials ?? [])
+        out.itemAttrib.append(contentsOf: patch.itemAttrib ?? [])
+        out.itemOfs.append(contentsOf: patch.itemOfs ?? [])
+        out.boringItems.append(contentsOf: patch.boringItems ?? [])
+        out.monsters.append(contentsOf: patch.monsters ?? [])
+        out.races.append(contentsOf: patch.races ?? [])
+        out.classes.append(contentsOf: patch.classes ?? [])
+        out.titles.append(contentsOf: patch.titles ?? [])
+        out.impressiveTitles.append(contentsOf: patch.impressiveTitles ?? [])
+        out.primeStats.append(contentsOf: patch.primeStats ?? [])
+        out.equipmentTypes.append(contentsOf: patch.equipmentTypes ?? [])
+        return out
+    }
+
+    nonisolated private static func buildValidationReport(for bundle: PQDataBundle, modFiles: [String], warnings: [String]) -> String {
+        var lines: [String] = []
+        lines.append("Loaded base data + \(modFiles.count) mod file(s).")
+        if !modFiles.isEmpty {
+            lines.append("Mods: \(modFiles.joined(separator: ", "))")
+        }
+        lines.append("")
+        lines.append("Counts:")
+        lines.append("Classes \(bundle.classes.count), Races \(bundle.races.count), Monsters \(bundle.monsters.count), Spells \(bundle.spells.count)")
+        lines.append("Weapons \(bundle.weapons.count), Armors \(bundle.armors.count), Shields \(bundle.shields.count)")
+        lines.append("ItemAttrib \(bundle.itemAttrib.count), ItemOfs \(bundle.itemOfs.count), BoringItems \(bundle.boringItems.count)")
+
+        var checks: [String] = []
+        if bundle.classes.isEmpty { checks.append("ERROR: classes is empty") }
+        if bundle.races.isEmpty { checks.append("ERROR: races is empty") }
+        if bundle.monsters.isEmpty { checks.append("ERROR: monsters is empty") }
+        if bundle.spells.isEmpty { checks.append("ERROR: spells is empty") }
+        if bundle.weapons.isEmpty || bundle.armors.isEmpty || bundle.shields.isEmpty {
+            checks.append("ERROR: one or more equipment pools are empty")
+        }
+        let badMonsters = bundle.monsters.filter { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.level <= 0 }
+        if !badMonsters.isEmpty {
+            checks.append("WARN: \(badMonsters.count) monster entries have blank name or non-positive level")
+        }
+        checks.append(contentsOf: warnings.map { "WARN: \($0)" })
+        if checks.isEmpty {
+            checks.append("Validation OK")
+        }
+
+        lines.append("")
+        lines.append(contentsOf: checks)
+        return lines.joined(separator: "\n")
     }
 
     private static func decodeWebsitePayload(from raw: Data) -> Data? {
