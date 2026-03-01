@@ -102,19 +102,35 @@ private struct ShieldXPView: View {
     let percent: Double
 
     var body: some View {
-        ZStack {
-            Image(systemName: "shield.fill")
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(.primary)
-                .mask(alignment: .leading) {
-                    Rectangle()
-                        .frame(width: 6.5)
-                }
-            Image(systemName: "shield")
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(.primary)
+        GeometryReader { geo in
+            let clamped = max(0, min(100, percent)) / 100.0
+            let halfWidth = geo.size.width * 0.5
+
+            ZStack(alignment: .bottom) {
+                Image(systemName: "shield.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.primary)
+                    .mask(alignment: .leading) {
+                        Rectangle().frame(width: halfWidth)
+                    }
+
+                Image(systemName: "shield.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.green)
+                    .mask(alignment: .trailing) {
+                        Rectangle().frame(width: halfWidth)
+                    }
+                    .mask(alignment: .bottom) {
+                        Rectangle().frame(height: geo.size.height * clamped)
+                    }
+
+                Image(systemName: "shield")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.primary)
+            }
         }
         .frame(width: 13, height: 15)
     }

@@ -24,6 +24,7 @@ struct DashboardView: View {
         case spellBook
         case inventory
         case quests
+        case mainProgress
     }
 
     @EnvironmentObject var appState: AppState
@@ -276,6 +277,7 @@ struct DashboardView: View {
                 }
             }
             .frame(height: 58)
+            .overlay { overviewPanelMask(.mainProgress) }
         }
         .padding(.horizontal, 10)
         .padding(.top, 8)
@@ -343,6 +345,9 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 GroupBox("Gameplay") {
                     VStack(alignment: .leading, spacing: 10) {
+                        Text("Runtime State: \(appState.runtimeStateMarker.rawValue)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Toggle("🚧 Compact menubar mode (Coming soon)", isOn: .constant(false))
                             .toggleStyle(.switch)
                             .disabled(true)
@@ -543,7 +548,10 @@ struct DashboardView: View {
                 if let image = appState.portraitNSImage() {
                     Image(nsImage: image)
                         .resizable()
-                        .scaledToFit()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 150, height: 150)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(6)
                 } else {
                     Image(systemName: "person.crop.square")
                         .resizable()
@@ -809,7 +817,10 @@ struct DashboardView: View {
 
         reentryMaskTask = Task { @MainActor in
             let reveals = OverviewPanel.allCases
-                .map { ($0, Double.random(in: 0.10...0.24)) }
+                .map { panel in
+                    let range: ClosedRange<Double> = panel == .mainProgress ? 0.30...0.51 : 0.10...0.24
+                    return (panel, Double.random(in: range))
+                }
                 .sorted { $0.1 < $1.1 }
             var elapsed: Double = 0
             for (panel, delay) in reveals {

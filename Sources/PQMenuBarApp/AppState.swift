@@ -30,6 +30,13 @@ private struct ModPatchBundle: Codable {
     var equipmentTypes: [String]?
 }
 
+enum RuntimeStateMarker: String, Codable {
+    case idle
+    case running
+    case paused
+    case reloadingData
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var state: GameState
@@ -45,6 +52,7 @@ final class AppState: ObservableObject {
     @Published var selectedCharacterID: UUID?
     @Published var sessionStarted: Bool
     @Published var statusMessage: String?
+    @Published private(set) var runtimeStateMarker: RuntimeStateMarker = .idle
     @Published var dashboardRequestedTab: String = "overview"
     @Published var dashboardRouteToken: Int = 0
     @Published var dataValidationReport: String = "No validation run yet."
@@ -110,6 +118,7 @@ final class AppState: ObservableObject {
             selectedCharacterID = nil
             sessionStarted = false
             statusMessage = nil
+            runtimeStateMarker = .idle
             portraitImageURL = nil
 
             let initialCharacter = loaded.characters.first ?? Self.defaultCharacter(from: initialDataBundle)
@@ -125,6 +134,9 @@ final class AppState: ObservableObject {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.state = newState
+                    if self.sessionStarted {
+                        self.runtimeStateMarker = newState.isPaused ? .paused : .running
+                    }
                     guard self.sessionStarted else { return }
                     if let idx = self.roster.firstIndex(where: { $0.id == newState.activeCharacter.id }) {
                         let previousLevel = self.roster[idx].level
@@ -236,11 +248,11 @@ final class AppState: ObservableObject {
         runtime.setPaused(false)
 
         sessionStarted = true
+        runtimeStateMarker = .running
         selectedCharacterID = character.id
         lastSeenLevelByCharacterID[character.id] = character.level
         persistRoster()
         refreshPortraitForCurrentCharacter()
-        handleAutomaticPortraitUpdate(character: character, previousLevel: nil)
         if emitFlash {
             flash("Started \(character.name).")
         }
@@ -256,6 +268,7 @@ final class AppState: ObservableObject {
         runtime.setPaused(true)
         runtime.stop()
         sessionStarted = false
+        runtimeStateMarker = .idle
         selectedCharacterID = nil
         portraitGenerationInFlightCharacterIDs.remove(state.activeCharacter.id)
         persistRoster()
@@ -288,6 +301,8 @@ final class AppState: ObservableObject {
 
     func reloadDataAndMods() {
         flash("Reloading data...")
+        let previousRuntimeState = runtimeStateMarker
+        runtimeStateMarker = .reloadingData
         let dataURL = dataDirectory.data.appendingPathComponent("default-data.json")
         let modsURL = dataDirectory.mods
 
@@ -299,10 +314,12 @@ final class AppState: ObservableObject {
                     self.dataBundle = bundle
                     self.runtime.setDataBundle(bundle)
                     self.dataValidationReport = report
+                    self.runtimeStateMarker = self.sessionStarted ? (self.state.isPaused ? .paused : .running) : .idle
                     self.flash("Data reloaded (\(modFiles.count) mod file\(modFiles.count == 1 ? "" : "s")).")
                 }
             } catch {
                 await MainActor.run {
+                    self.runtimeStateMarker = previousRuntimeState
                     self.flash("Reload failed: \(error.localizedDescription)")
                 }
             }
@@ -313,6 +330,7 @@ final class AppState: ObservableObject {
         guard sessionStarted else { return }
         let next = !state.isPaused
         runtime.setPaused(next)
+        runtimeStateMarker = next ? .paused : .running
         flash(next ? "Game paused!" : "Resuming!")
     }
 
@@ -474,9 +492,11 @@ final class AppState: ObservableObject {
     }
 
     func exportCharacterInteractive() {
+        let selectedForFilename = selectedCharacter ?? (sessionStarted ? state.activeCharacter : nil)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType.json, UTType(filenameExtension: "pkl")!, UTType(filenameExtension: "pqw")!]
-        panel.nameFieldStringValue = "character.pkl"
+        let base = selectedForFilename.map { "\($0.name)_\($0.level)" } ?? "character"
+        panel.nameFieldStringValue = "\(sanitizeFilename(base)).json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
@@ -495,6 +515,13 @@ final class AppState: ObservableObject {
         }
     }
 
+    private func sanitizeFilename(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let parts = value.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
+        let built = String(parts).replacingOccurrences(of: "__", with: "_")
+        return built.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+    }
+
     func rollStats() -> Stats {
         func d6() -> Int { Int.random(in: 0..<6) }
         var values: [String: Int] = [
@@ -508,6 +535,31 @@ final class AppState: ObservableObject {
         values[StatType.hpMax.rawValue] = Int.random(in: 0..<8) + (values[StatType.condition.rawValue] ?? 0) / 6
         values[StatType.mpMax.rawValue] = Int.random(in: 0..<8) + (values[StatType.intelligence.rawValue] ?? 0) / 6
         return Stats(values: values)
+    }
+
+    func generateFantasyName() -> String {
+        let starts = ["br", "cr", "dr", "el", "fa", "ga", "ka", "mor", "nar", "or", "ra", "sha", "tha", "val", "wyr", "zir"]
+        let vowels = ["a", "e", "i", "o", "u", "ae", "ia", "ou"]
+        let middles = ["d", "g", "k", "l", "m", "n", "r", "s", "th", "v", "z"]
+        let ends = ["", "n", "r", "s", "th", "dor", "mir", "ion", "eth", "ael", "orn", "wyn"]
+
+        var name = starts.randomElement() ?? "ar"
+        let syllables = Int.random(in: 1...3)
+        for _ in 0..<syllables {
+            name += vowels.randomElement() ?? "a"
+            if Bool.random() {
+                name += middles.randomElement() ?? "n"
+            }
+        }
+        name += ends.randomElement() ?? ""
+
+        if name.count < 4 {
+            name += "an"
+        }
+        if name.count > 12 {
+            name = String(name.prefix(12))
+        }
+        return name.prefix(1).uppercased() + name.dropFirst().lowercased()
     }
 
     @discardableResult
@@ -545,8 +597,16 @@ final class AppState: ObservableObject {
             return [gameState.activeCharacter]
         }
 
+        if let roster = try? decoder.decode(RosterFile.self, from: data) {
+            return roster.characters
+        }
+
         if let player = try? decoder.decode(PlayerState.self, from: data) {
             return [player]
+        }
+
+        if let wrappedPlayers = try? decoder.decode(PlayerStateWrapperPayload.self, from: data) {
+            return wrappedPlayers.players
         }
 
         if let imported = try? decoder.decode(ImportedPayload.self, from: data) {
@@ -1311,6 +1371,10 @@ private func makeLogArchiveTimer(logStore: EventLogStore) -> DispatchSourceTimer
 
 private struct ImportedPayload: Codable {
     var players: [ImportedPlayer]
+}
+
+private struct PlayerStateWrapperPayload: Codable {
+    var players: [PlayerState]
 }
 
 private struct ImportedPlayer: Codable {

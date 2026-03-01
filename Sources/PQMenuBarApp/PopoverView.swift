@@ -164,6 +164,26 @@ struct PopoverView: View {
                     creatingCharacter = false
                     previousRolledStats = nil
                 }
+                Button("Randomize + Start") {
+                    let randomRace = appState.dataBundle.races.randomElement()?.name ?? "Half Orc"
+                    let randomClass = appState.dataBundle.classes.randomElement()?.name ?? "Ur-Paladin"
+                    let randomStats = appState.rollStats()
+                    let randomName = appState.generateFantasyName()
+
+                    newCharacterRace = randomRace
+                    newCharacterClass = randomClass
+                    newCharacterName = randomName
+                    rolledStats = randomStats
+                    previousRolledStats = nil
+
+                    appState.createCharacter(
+                        name: randomName,
+                        race: randomRace,
+                        className: randomClass,
+                        stats: randomStats
+                    )
+                    creatingCharacter = false
+                }
                 Button("Cancel") {
                     creatingCharacter = false
                     previousRolledStats = nil

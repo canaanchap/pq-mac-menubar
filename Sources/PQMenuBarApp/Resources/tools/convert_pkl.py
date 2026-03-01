@@ -136,11 +136,25 @@ def run_import(input_path: Path, output_path: Path) -> int:
     with input_path.open("rb") as f:
         obj = pickle.load(f)
 
+    payload: dict[str, Any] = {"source": input_path.name}
+
     # pq-cli save files are usually a list of players.
     if isinstance(obj, list) and obj:
-        payload = {"players": [_convert_player(p) for p in obj], "source": input_path.name}
+        payload["players"] = [_convert_player(p) for p in obj]
+    elif isinstance(obj, dict):
+        # App-exported pickle may contain canonical JSON already.
+        if "activeCharacter" in obj and isinstance(obj["activeCharacter"], dict):
+            payload["players"] = [obj["activeCharacter"]]
+        elif "players" in obj and isinstance(obj["players"], list):
+            payload["players"] = obj["players"]
+        elif "characters" in obj and isinstance(obj["characters"], list):
+            payload["players"] = obj["characters"]
+        elif "name" in obj and "stats" in obj:
+            payload["players"] = [obj]
+        else:
+            payload["raw"] = repr(obj)
     else:
-        payload = {"raw": repr(obj), "source": input_path.name}
+        payload["raw"] = repr(obj)
 
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
