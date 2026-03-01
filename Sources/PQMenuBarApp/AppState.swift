@@ -37,6 +37,15 @@ enum RuntimeStateMarker: String, Codable {
     case reloadingData
 }
 
+enum MenubarIconTrackMode: String, Codable, CaseIterable, Identifiable {
+    case level = "Level"
+    case currentTask = "Current Task"
+    case currentQuest = "Current Quest"
+    case encumbrance = "Encumbrance"
+
+    var id: String { rawValue }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var state: GameState
@@ -86,10 +95,12 @@ final class AppState: ObservableObject {
     private static let tickRateDefaultsKey = "pq.runtime.tickRate"
     private static let persistentDashboardWindowDefaultsKey = "pq.dashboard.persistentWindow"
     private static let betaReentryMaskDefaultsKey = "pq.debug.betaReentryMask"
+    private static let menubarTrackByCharacterDefaultsKey = "pq.menubar.trackByCharacter"
     private var portraitGenerationInFlightCharacterIDs: Set<UUID> = []
     private var lastSeenLevelByCharacterID: [UUID: Int] = [:]
     private var logArchiveTimer: DispatchSourceTimer?
     private var lastRosterPersistAt: Date = .distantPast
+    private var menubarTrackByCharacterID: [UUID: MenubarIconTrackMode] = [:]
 
     init() {
         do {
@@ -104,6 +115,7 @@ final class AppState: ObservableObject {
             tickRateMultiplier = savedTickRate > 0 ? savedTickRate : 1.0
             persistentDashboardWindow = UserDefaults.standard.bool(forKey: Self.persistentDashboardWindowDefaultsKey)
             betaReentryLoadMaskEnabled = UserDefaults.standard.bool(forKey: Self.betaReentryMaskDefaultsKey)
+            menubarTrackByCharacterID = Self.loadMenubarTrackMap()
 
             let userDataURL = dataDirectory.data.appendingPathComponent("default-data.json")
             try Self.ensureDefaultData(at: userDataURL)
@@ -194,6 +206,45 @@ final class AppState: ObservableObject {
     var selectedCharacter: PlayerState? {
         guard let selectedCharacterID else { return nil }
         return roster.first(where: { $0.id == selectedCharacterID })
+    }
+
+    var currentContextCharacter: PlayerState? {
+        if sessionStarted {
+            return state.activeCharacter
+        }
+        return selectedCharacter
+    }
+
+    var currentMenubarTrackMode: MenubarIconTrackMode {
+        guard let character = currentContextCharacter else { return .level }
+        return menubarTrackByCharacterID[character.id] ?? .level
+    }
+
+    func setCurrentMenubarTrackMode(_ mode: MenubarIconTrackMode) {
+        guard let character = currentContextCharacter else { return }
+        menubarTrackByCharacterID[character.id] = mode
+        persistMenubarTrackMap()
+    }
+
+    func menubarProgressPercent(for character: PlayerState) -> Double {
+        switch menubarTrackMode(for: character) {
+        case .level:
+            return character.xpProgressPercent
+        case .currentTask:
+            return character.taskProgressPercent
+        case .currentQuest:
+            let bar = character.questBook.questBar
+            guard bar.max > 0 else { return 0 }
+            return (bar.position / bar.max) * 100.0
+        case .encumbrance:
+            guard character.inventoryCapacity > 0 else { return 0 }
+            let used = character.inventoryItems.reduce(0) { $0 + $1.quantity }
+            return (Double(used) / Double(character.inventoryCapacity)) * 100.0
+        }
+    }
+
+    func menubarTrackMode(for character: PlayerState) -> MenubarIconTrackMode {
+        menubarTrackByCharacterID[character.id] ?? .level
     }
 
     func startSelectedCharacter() {
@@ -477,13 +528,22 @@ final class AppState: ObservableObject {
             case .cancel:
                 return
             case .importToRosterOnly:
+                guard confirmOverwriteByNameIfNeeded(players: importedPlayers) else {
+                    flash("Import canceled.")
+                    return
+                }
                 importedPlayers.forEach { mergeImportedCharacter($0) }
                 flash("Imported \(importedPlayers.count) character(s) to roster.")
             case .importAndStart:
+                guard confirmOverwriteByNameIfNeeded(players: importedPlayers) else {
+                    flash("Import canceled.")
+                    return
+                }
                 importedPlayers.forEach { mergeImportedCharacter($0) }
                 if let first = importedPlayers.first {
                     selectedCharacterID = first.id
                     loadAndStartSelectedCharacter()
+                    requestDashboardTab("overview")
                 }
             }
         } catch {
@@ -539,7 +599,7 @@ final class AppState: ObservableObject {
 
     func generateFantasyName() -> String {
         let starts = ["br", "cr", "dr", "el", "fa", "ga", "ka", "mor", "nar", "or", "ra", "sha", "tha", "val", "wyr", "zir"]
-        let vowels = ["a", "e", "i", "o", "u", "ae", "ia", "ou"]
+        let vowels = ["a", "a", "e", "e", "i", "o", "u", "ae"]
         let middles = ["d", "g", "k", "l", "m", "n", "r", "s", "th", "v", "z"]
         let ends = ["", "n", "r", "s", "th", "dor", "mir", "ion", "eth", "ael", "orn", "wyn"]
 
@@ -689,12 +749,35 @@ final class AppState: ObservableObject {
     private func mergeImportedCharacter(_ c: PlayerState) {
         if let idx = roster.firstIndex(where: { $0.id == c.id }) {
             roster[idx] = c
+            selectedCharacterID = c.id
+        } else if let idx = roster.firstIndex(where: { $0.name.caseInsensitiveCompare(c.name) == .orderedSame }) {
+            var replaced = c
+            replaced.id = roster[idx].id
+            roster[idx] = replaced
+            selectedCharacterID = replaced.id
         } else {
             roster.append(c)
+            selectedCharacterID = c.id
         }
-        selectedCharacterID = c.id
         persistRoster()
         refreshPortraitForCurrentCharacter()
+    }
+
+    private func confirmOverwriteByNameIfNeeded(players: [PlayerState]) -> Bool {
+        for incoming in players {
+            if let existing = roster.first(where: {
+                $0.name.caseInsensitiveCompare(incoming.name) == .orderedSame && $0.id != incoming.id
+            }) {
+                let overwrite = NSAlert.runAskYesNo(
+                    title: "Overwrite \"\(existing.name)\"?",
+                    message: "A character with this name already exists. Overwrite it with imported data?"
+                )
+                if !overwrite {
+                    return false
+                }
+            }
+        }
+        return true
     }
 
     private func importLegacyCharacterFile(_ input: URL) throws -> URL {
@@ -1133,7 +1216,7 @@ final class AppState: ObservableObject {
         let (data, response) = try await URLSession.shared.data(for: req)
         try validateHTTP(response, data: data)
         let decoded = try await decodeImageData(from: data)
-        return try resizePNG(decoded, width: 100, height: 125)
+        return try resizePNG(decoded, width: 256, height: 256)
     }
 
     private func requestImageEditPNG(prompt: String, apiKey: String, baseImageURL: URL, model: String) async throws -> Data {
@@ -1168,7 +1251,7 @@ final class AppState: ObservableObject {
         let (data, response) = try await URLSession.shared.data(for: req)
         try validateHTTP(response, data: data)
         let decoded = try await decodeImageData(from: data)
-        return try resizePNG(decoded, width: 100, height: 125)
+        return try resizePNG(decoded, width: 256, height: 256)
     }
 
     private func validateHTTP(_ response: URLResponse, data: Data) throws {
@@ -1226,9 +1309,28 @@ final class AppState: ObservableObject {
             throw NSError(domain: "pq-menubar", code: 610, userInfo: [NSLocalizedDescriptionKey: "Failed to decode generated image"])
         }
         let target = NSSize(width: width, height: height)
+        let source = input.size
+        guard source.width > 0, source.height > 0 else {
+            throw NSError(domain: "pq-menubar", code: 613, userInfo: [NSLocalizedDescriptionKey: "Invalid source image size"])
+        }
+
+        let scale = max(target.width / source.width, target.height / source.height)
+        let drawSize = NSSize(width: source.width * scale, height: source.height * scale)
+        let drawOrigin = NSPoint(
+            x: (target.width - drawSize.width) / 2.0,
+            y: (target.height - drawSize.height) / 2.0
+        )
+
         let output = NSImage(size: target)
         output.lockFocus()
-        input.draw(in: NSRect(origin: .zero, size: target), from: .zero, operation: .copy, fraction: 1.0)
+        NSColor.clear.setFill()
+        NSBezierPath(rect: NSRect(origin: .zero, size: target)).fill()
+        input.draw(
+            in: NSRect(origin: drawOrigin, size: drawSize),
+            from: NSRect(origin: .zero, size: source),
+            operation: .copy,
+            fraction: 1.0
+        )
         output.unlockFocus()
 
         guard
@@ -1356,6 +1458,25 @@ this is my character for a simple idle RPG. my name is {{character_name}}, a lev
         let fm = FileManager.default
         guard fm.fileExists(atPath: destination.path) == false else { return }
         try defaultPortraitPromptTemplate.write(to: destination, atomically: true, encoding: .utf8)
+    }
+
+    private static func loadMenubarTrackMap() -> [UUID: MenubarIconTrackMode] {
+        guard let raw = UserDefaults.standard.dictionary(forKey: Self.menubarTrackByCharacterDefaultsKey) as? [String: String] else {
+            return [:]
+        }
+        var map: [UUID: MenubarIconTrackMode] = [:]
+        for (key, value) in raw {
+            guard let id = UUID(uuidString: key), let mode = MenubarIconTrackMode(rawValue: value) else { continue }
+            map[id] = mode
+        }
+        return map
+    }
+
+    private func persistMenubarTrackMap() {
+        let raw = menubarTrackByCharacterID.reduce(into: [String: String]()) { partial, item in
+            partial[item.key.uuidString] = item.value.rawValue
+        }
+        UserDefaults.standard.set(raw, forKey: Self.menubarTrackByCharacterDefaultsKey)
     }
 }
 

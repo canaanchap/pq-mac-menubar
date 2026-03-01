@@ -40,6 +40,9 @@ struct DashboardView: View {
     @State private var overviewMaskVisible: Bool = false
     @State private var readyOverviewPanels: Set<OverviewPanel> = Set(OverviewPanel.allCases)
     @State private var reentryMaskTask: Task<Void, Never>?
+    @State private var mainProgressLoadingActive: Bool = false
+    @State private var lastObservedTaskProgressPercent: Double = 0
+    @State private var lastObservedTaskDescription: String = ""
 
     private let tickRateOptions: [Double] = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
 
@@ -87,6 +90,12 @@ struct DashboardView: View {
         .onDisappear {
             removeKeyboardMonitor()
             stopReentryMask()
+        }
+        .onChange(of: appState.state.activeCharacter.taskProgressPercent) { _, newPercent in
+            handleMainProgressLoadingGate(newPercent: newPercent, newTaskDescription: appState.state.activeCharacter.task?.description ?? "")
+        }
+        .onChange(of: appState.state.activeCharacter.task?.description ?? "") { _, newTaskDescription in
+            handleMainProgressLoadingGate(newPercent: appState.state.activeCharacter.taskProgressPercent, newTaskDescription: newTaskDescription)
         }
         .overlay(alignment: .top) {
             if let msg = appState.statusMessage {
@@ -348,6 +357,19 @@ struct DashboardView: View {
                         Text("Runtime State: \(appState.runtimeStateMarker.rawValue)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        HStack {
+                            Text("Track What With Menubar Icon?")
+                            Picker("Track What With Menubar Icon?", selection: Binding(
+                                get: { appState.currentMenubarTrackMode },
+                                set: { appState.setCurrentMenubarTrackMode($0) }
+                            )) {
+                                ForEach(MenubarIconTrackMode.allCases) { mode in
+                                    Text(mode.rawValue).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                        }
                         Toggle("🚧 Compact menubar mode (Coming soon)", isOn: .constant(false))
                             .toggleStyle(.switch)
                             .disabled(true)
@@ -548,8 +570,9 @@ struct DashboardView: View {
                 if let image = appState.portraitNSImage() {
                     Image(nsImage: image)
                         .resizable()
-                        .aspectRatio(contentMode: .fit)
+                        .aspectRatio(contentMode: .fill)
                         .frame(width: 150, height: 150)
+                        .clipped()
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
                         .padding(6)
                 } else {
@@ -814,12 +837,15 @@ struct DashboardView: View {
         reentryMaskTask?.cancel()
         overviewMaskVisible = true
         readyOverviewPanels = []
+        mainProgressLoadingActive = true
+        lastObservedTaskProgressPercent = appState.state.activeCharacter.taskProgressPercent
+        lastObservedTaskDescription = appState.state.activeCharacter.task?.description ?? ""
 
         reentryMaskTask = Task { @MainActor in
             let reveals = OverviewPanel.allCases
+                .filter { $0 != .mainProgress }
                 .map { panel in
-                    let range: ClosedRange<Double> = panel == .mainProgress ? 0.30...0.51 : 0.10...0.24
-                    return (panel, Double.random(in: range))
+                    (panel, Double.random(in: 0.10...0.24))
                 }
                 .sorted { $0.1 < $1.1 }
             var elapsed: Double = 0
@@ -834,8 +860,10 @@ struct DashboardView: View {
             }
             guard !Task.isCancelled else { return }
             try? await Task.sleep(nanoseconds: 80_000_000)
-            withAnimation(.easeOut(duration: 0.06)) {
-                overviewMaskVisible = false
+            if !mainProgressLoadingActive {
+                withAnimation(.easeOut(duration: 0.06)) {
+                    overviewMaskVisible = false
+                }
             }
         }
     }
@@ -845,6 +873,7 @@ struct DashboardView: View {
         reentryMaskTask = nil
         overviewMaskVisible = false
         readyOverviewPanels = Set(OverviewPanel.allCases)
+        mainProgressLoadingActive = false
     }
 
     private func encumbrance(_ p: PlayerState) -> Int {
@@ -870,7 +899,9 @@ struct DashboardView: View {
 
     @ViewBuilder
     private func overviewPanelMask(_ panel: OverviewPanel) -> some View {
-        if overviewMaskVisible && !readyOverviewPanels.contains(panel) {
+        let isMainProgressMaskActive = panel == .mainProgress && overviewMaskVisible && mainProgressLoadingActive
+        let isRegularMaskActive = panel != .mainProgress && overviewMaskVisible && !readyOverviewPanels.contains(panel)
+        if isMainProgressMaskActive || isRegularMaskActive {
             ZStack {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color.gray.opacity(0.18))
@@ -878,6 +909,30 @@ struct DashboardView: View {
                     .controlSize(.small)
             }
             .transition(.opacity)
+        }
+    }
+
+    private func handleMainProgressLoadingGate(newPercent: Double, newTaskDescription: String) {
+        defer {
+            lastObservedTaskProgressPercent = newPercent
+            lastObservedTaskDescription = newTaskDescription
+        }
+
+        guard overviewMaskVisible, mainProgressLoadingActive, overviewMaskEnabled, selectedTab == .overview else { return }
+
+        let taskChanged = !lastObservedTaskDescription.isEmpty && newTaskDescription != lastObservedTaskDescription
+        let wrappedToNewCycle = lastObservedTaskProgressPercent > 90 && newPercent < 15
+        if taskChanged || wrappedToNewCycle {
+            withAnimation(.easeOut(duration: 0.06)) {
+                mainProgressLoadingActive = false
+            }
+
+            // If every panel has cleared, remove overlay entirely.
+            if readyOverviewPanels.count == OverviewPanel.allCases.filter({ $0 != .mainProgress }).count {
+                withAnimation(.easeOut(duration: 0.06)) {
+                    overviewMaskVisible = false
+                }
+            }
         }
     }
 }
