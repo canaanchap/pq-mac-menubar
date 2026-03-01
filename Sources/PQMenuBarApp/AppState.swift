@@ -515,6 +515,13 @@ final class AppState: ObservableObject {
         panel.allowsMultipleSelection = false
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard NSAlert.runAskYesNo(
+            title: "Warning: Characters can be imported once only.",
+            message: "Are you sure you want to do this?"
+        ) else {
+            flash("Import canceled.")
+            return
+        }
 
         do {
             let importedPlayers = try parseImportedPlayers(from: url)
@@ -534,6 +541,7 @@ final class AppState: ObservableObject {
                 }
                 importedPlayers.forEach { mergeImportedCharacter($0) }
                 flash("Imported \(importedPlayers.count) character(s) to roster.")
+                burnImportedFile(url)
             case .importAndStart:
                 guard confirmOverwriteByNameIfNeeded(players: importedPlayers) else {
                     flash("Import canceled.")
@@ -545,6 +553,7 @@ final class AppState: ObservableObject {
                     loadAndStartSelectedCharacter()
                     requestDashboardTab("overview")
                 }
+                burnImportedFile(url)
             }
         } catch {
             flash("Import failed: \(error.localizedDescription)")
@@ -565,7 +574,7 @@ final class AppState: ObservableObject {
                 try exportSelectedCharacterJSON(to: url)
             } else {
                 let tempJSON = dataDirectory.saves.appendingPathComponent("export-\(UUID().uuidString).json")
-                try exportSelectedCharacterJSON(to: tempJSON)
+                try exportSelectedCharacterJSON(to: tempJSON, addTrailingNoise: false)
                 try legacyBridge().exportPKL(from: tempJSON, to: url)
                 try? FileManager.default.removeItem(at: tempJSON)
             }
@@ -650,26 +659,27 @@ final class AppState: ObservableObject {
     }
 
     private func parsePlayersFromJSONData(_ data: Data) throws -> [PlayerState] {
+        let normalized = Self.trimTrailingJSONNoise(data)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        if let gameState = try? decoder.decode(GameState.self, from: data) {
+        if let gameState = try? decoder.decode(GameState.self, from: normalized) {
             return [gameState.activeCharacter]
         }
 
-        if let roster = try? decoder.decode(RosterFile.self, from: data) {
+        if let roster = try? decoder.decode(RosterFile.self, from: normalized) {
             return roster.characters
         }
 
-        if let player = try? decoder.decode(PlayerState.self, from: data) {
+        if let player = try? decoder.decode(PlayerState.self, from: normalized) {
             return [player]
         }
 
-        if let wrappedPlayers = try? decoder.decode(PlayerStateWrapperPayload.self, from: data) {
+        if let wrappedPlayers = try? decoder.decode(PlayerStateWrapperPayload.self, from: normalized) {
             return wrappedPlayers.players
         }
 
-        if let imported = try? decoder.decode(ImportedPayload.self, from: data) {
+        if let imported = try? decoder.decode(ImportedPayload.self, from: normalized) {
             var players: [PlayerState] = []
             for p in imported.players {
                 let player = p.toPlayerState(defaultData: dataBundle)
@@ -678,7 +688,7 @@ final class AppState: ObservableObject {
             return players
         }
 
-        if let webPlayer = try decodeWebsiteExportPlayer(from: data) {
+        if let webPlayer = try decodeWebsiteExportPlayer(from: normalized) {
             return [webPlayer]
         }
 
@@ -689,7 +699,7 @@ final class AppState: ObservableObject {
         )
     }
 
-    private func exportSelectedCharacterJSON(to url: URL) throws {
+    private func exportSelectedCharacterJSON(to url: URL, addTrailingNoise: Bool = true) throws {
         guard let c = selectedCharacter ?? (sessionStarted ? state.activeCharacter : nil) else {
             throw NSError(domain: "pq-menubar", code: 30, userInfo: [NSLocalizedDescriptionKey: "No character selected"])
         }
@@ -703,7 +713,11 @@ final class AppState: ObservableObject {
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
-        try payload.write(to: url, options: .atomic)
+        var out = payload
+        if addTrailingNoise, let randomByte = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".utf8.randomElement() {
+            out.append(randomByte)
+        }
+        try out.write(to: url, options: .atomic)
     }
 
     private enum ImportDecision {
@@ -766,7 +780,7 @@ final class AppState: ObservableObject {
     private func confirmOverwriteByNameIfNeeded(players: [PlayerState]) -> Bool {
         for incoming in players {
             if let existing = roster.first(where: {
-                $0.name.caseInsensitiveCompare(incoming.name) == .orderedSame && $0.id != incoming.id
+                $0.name.caseInsensitiveCompare(incoming.name) == .orderedSame
             }) {
                 let overwrite = NSAlert.runAskYesNo(
                     title: "Overwrite \"\(existing.name)\"?",
@@ -778,6 +792,17 @@ final class AppState: ObservableObject {
             }
         }
         return true
+    }
+
+    private func burnImportedFile(_ url: URL) {
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        let token = String((0..<8).map { _ in alphabet.randomElement() ?? "Z" })
+        let consumedText = "CONSUMED_IMPORT_\(token)\n"
+        do {
+            try consumedText.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            events.insert(.init(message: "Warning: imported file was not burned (\(error.localizedDescription))."), at: 0)
+        }
     }
 
     private func importLegacyCharacterFile(_ input: URL) throws -> URL {
@@ -1458,6 +1483,24 @@ this is my character for a simple idle RPG. my name is {{character_name}}, a lev
         let fm = FileManager.default
         guard fm.fileExists(atPath: destination.path) == false else { return }
         try defaultPortraitPromptTemplate.write(to: destination, atomically: true, encoding: .utf8)
+    }
+
+    private nonisolated static func trimTrailingJSONNoise(_ data: Data) -> Data {
+        guard var text = String(data: data, encoding: .utf8) else { return data }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return data }
+        if (try? JSONSerialization.jsonObject(with: Data(text.utf8), options: [])) != nil {
+            return Data(text.utf8)
+        }
+        while !text.isEmpty {
+            _ = text.removeLast()
+            let candidate = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if candidate.isEmpty { break }
+            if (try? JSONSerialization.jsonObject(with: Data(candidate.utf8), options: [])) != nil {
+                return Data(candidate.utf8)
+            }
+        }
+        return data
     }
 
     private static func loadMenubarTrackMap() -> [UUID: MenubarIconTrackMode] {

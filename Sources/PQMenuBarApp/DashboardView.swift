@@ -282,7 +282,12 @@ struct DashboardView: View {
             panel(nil) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text((p.task?.description ?? "Loading") + "...")
-                    plainTaskMetricBar(p.taskProgressPercent)
+                    if overviewMaskVisible && mainProgressLoadingActive {
+                        Color.clear
+                            .frame(height: 12)
+                    } else {
+                        plainTaskMetricBar(p.taskProgressPercent)
+                    }
                 }
             }
             .frame(height: 58)

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Foundation
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -22,39 +23,28 @@ struct PQMenuBarApp: App {
                 .environmentObject(appState)
         } label: {
             let activeCharacter = appState.state.activeCharacter
+            let trackMode = appState.currentMenubarTrackMode
             let progressPercent = appState.sessionStarted ? appState.menubarProgressPercent(for: activeCharacter) : 0
-            let trackMode = appState.sessionStarted ? appState.menubarTrackMode(for: activeCharacter) : .level
-            let trackColor: Color = switch trackMode {
-            case .level: .green
-            case .currentTask: .red
-            case .currentQuest: .yellow
-            case .encumbrance: .orange
-            }
+            let shieldImage = MenubarShieldIconCatalog.shared.image(
+                started: appState.sessionStarted,
+                mode: trackMode,
+                percent: progressPercent
+            )
 
-            HStack(spacing: 6) {
-                ShieldXPView(percent: progressPercent, rightFillColor: trackColor)
-                    .frame(width: 14, height: 16)
+            HStack(spacing: 5) {
+                if let shieldImage {
+                    Image(nsImage: shieldImage)
+                        .renderingMode(.original)
+                        .interpolation(.none)
+                } else {
+                    Image(systemName: "shield")
+                }
+                Text(appState.sessionStarted ? "Lv \(appState.state.activeCharacter.level)" : "Lv ?")
                 if appState.sessionStarted && appState.state.isPaused {
                     Image(systemName: "pause.fill")
                         .font(.system(size: 9, weight: .bold))
                 }
-                Text(appState.sessionStarted ? "Lv \(appState.state.activeCharacter.level)" : "Lv ?")
-                    .foregroundStyle(appState.sessionStarted ? .primary : .secondary)
-                if !appState.compactMode {
-                    if appState.sessionStarted {
-                        let pct = Int(appState.state.activeCharacter.taskProgressPercent)
-                        Text(miniBar(percent: pct))
-                            .foregroundStyle(.secondary)
-                        Text("\(pct)%")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("-")
-                            .foregroundStyle(.secondary)
-                    }
-                }
             }
-            .opacity(appState.sessionStarted && appState.state.isPaused ? 0.55 : (appState.sessionStarted ? 1.0 : 0.7))
-            .help("Progress Quest")
         }
         .menuBarExtraStyle(.window)
 
@@ -69,11 +59,73 @@ struct PQMenuBarApp: App {
         }
         .defaultSize(width: 980, height: 620)
     }
+}
 
-    private func miniBar(percent: Int) -> String {
+@MainActor
+private final class MenubarShieldIconCatalog {
+    static let shared = MenubarShieldIconCatalog()
+
+    private var cache: [String: NSImage] = [:]
+    private let pointSize = NSSize(width: 18, height: 18)
+
+    func image(started: Bool, mode: MenubarIconTrackMode, percent: Double) -> NSImage? {
+        let relativePath: String
+        if !started {
+            relativePath = "blank/shield-blank-18px.png"
+        } else {
+            let bucket = bucketForPercent(percent)
+            switch mode {
+            case .level:
+                relativePath = "level/18px/shield-green-18px-\(bucket).png"
+            case .currentTask:
+                relativePath = "current_task/18px/shield-red-18px-\(bucket).png"
+            case .currentQuest:
+                relativePath = "current_quest/18px/shield-yellow-18px-\(bucket).png"
+            case .encumbrance:
+                relativePath = "encumbrance/18px/shield-dark_yellow-18px-\(bucket).png"
+            }
+        }
+
+        if let cached = cache[relativePath] {
+            return cached
+        }
+
+        for root in assetRoots() {
+            let url = root.appendingPathComponent(relativePath)
+            if let image = NSImage(contentsOf: url) {
+                image.isTemplate = false
+                image.size = pointSize
+                cache[relativePath] = image
+                return image
+            }
+        }
+        return nil
+    }
+
+    private func bucketForPercent(_ percent: Double) -> Int {
         let clamped = max(0, min(100, percent))
-        let fill = Int(round(Double(clamped) / 20.0))
-        return "[" + String(repeating: "=", count: fill) + String(repeating: " ", count: max(0, 5 - fill)) + "]"
+        if clamped <= 0 {
+            return 1
+        }
+        return max(1, min(10, Int(ceil(clamped / 10.0))))
+    }
+
+    private func assetRoots() -> [URL] {
+        let fm = FileManager.default
+        let cwd = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
+        var roots: [URL] = [
+            cwd.appendingPathComponent("assets/exports", isDirectory: true),
+            cwd.appendingPathComponent("../assets/exports", isDirectory: true),
+            cwd.appendingPathComponent("../../assets/exports", isDirectory: true),
+        ]
+
+        if let resources = Bundle.main.resourceURL {
+            roots.append(resources.appendingPathComponent("assets/exports", isDirectory: true))
+            roots.append(resources.appendingPathComponent("Resources/assets/exports", isDirectory: true))
+        }
+        roots.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/assets/exports", isDirectory: true))
+
+        return roots
     }
 }
 
@@ -105,77 +157,5 @@ private struct DashboardWindowConfigurator: NSViewRepresentable {
         } else {
             window.isReleasedWhenClosed = true
         }
-    }
-}
-
-private struct ShieldXPView: View {
-    let percent: Double
-    let rightFillColor: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            let ratio = max(0, min(100, percent)) / 100.0
-            let halfWidth = geo.size.width * 0.5
-
-            ZStack(alignment: .bottom) {
-                ShieldShape()
-                    .fill(Color.primary)
-                    .mask(alignment: .leading) {
-                        Rectangle().frame(width: halfWidth)
-                    }
-
-                ShieldShape()
-                    .fill(rightFillColor)
-                    .mask(alignment: .trailing) {
-                        Rectangle().frame(width: halfWidth)
-                    }
-                    .mask(alignment: .bottom) {
-                        Rectangle().frame(height: geo.size.height * ratio)
-                    }
-
-                ShieldShape()
-                    .stroke(Color.primary, lineWidth: 1.2)
-            }
-        }
-        .frame(width: 13, height: 15)
-    }
-}
-
-private struct ShieldShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let w = rect.width
-        let h = rect.height
-        let top = CGPoint(x: rect.midX, y: rect.minY + h * 0.05)
-        let rightTop = CGPoint(x: rect.minX + w * 0.85, y: rect.minY + h * 0.20)
-        let rightMid = CGPoint(x: rect.minX + w * 0.86, y: rect.minY + h * 0.57)
-        let bottom = CGPoint(x: rect.midX, y: rect.minY + h * 0.95)
-        let leftMid = CGPoint(x: rect.minX + w * 0.14, y: rect.minY + h * 0.57)
-        let leftTop = CGPoint(x: rect.minX + w * 0.15, y: rect.minY + h * 0.20)
-
-        var p = Path()
-        p.move(to: top)
-        p.addLine(to: rightTop)
-        p.addCurve(
-            to: rightMid,
-            control1: CGPoint(x: rect.minX + w * 0.89, y: rect.minY + h * 0.30),
-            control2: CGPoint(x: rect.minX + w * 0.91, y: rect.minY + h * 0.46)
-        )
-        p.addCurve(
-            to: bottom,
-            control1: CGPoint(x: rect.minX + w * 0.82, y: rect.minY + h * 0.75),
-            control2: CGPoint(x: rect.minX + w * 0.63, y: rect.minY + h * 0.92)
-        )
-        p.addCurve(
-            to: leftMid,
-            control1: CGPoint(x: rect.minX + w * 0.37, y: rect.minY + h * 0.92),
-            control2: CGPoint(x: rect.minX + w * 0.18, y: rect.minY + h * 0.75)
-        )
-        p.addCurve(
-            to: leftTop,
-            control1: CGPoint(x: rect.minX + w * 0.09, y: rect.minY + h * 0.46),
-            control2: CGPoint(x: rect.minX + w * 0.11, y: rect.minY + h * 0.30)
-        )
-        p.closeSubpath()
-        return p
     }
 }
