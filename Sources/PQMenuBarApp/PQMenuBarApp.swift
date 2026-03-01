@@ -68,24 +68,25 @@ private final class MenubarShieldIconCatalog {
 
     private var cache: [String: NSImage] = [:]
     private let pointSize = NSSize(width: 18, height: 18)
+    private let assetSize = 36
 
     func image(started: Bool, mode: MenubarIconTrackMode, percent: Double) -> NSImage? {
         let relativePath: String
         if !started {
-            relativePath = "blank/shield-blank-18px.png"
+            relativePath = "blank/shield-blank-\(assetSize)px.png"
         } else {
             let bucket = bucketForPercent(percent)
             switch mode {
             case .level:
-                relativePath = "level/18px/shield-green-18px-\(bucket).png"
+                relativePath = "level/\(assetSize)px/shield-green-\(assetSize)px-\(bucket).png"
             case .currentTask:
-                relativePath = "current_task/18px/shield-red-18px-\(bucket).png"
+                relativePath = "current_task/\(assetSize)px/shield-red-\(assetSize)px-\(bucket).png"
             case .currentQuest:
-                relativePath = "current_quest/18px/shield-yellow-18px-\(bucket).png"
+                relativePath = "current_quest/\(assetSize)px/shield-yellow-\(assetSize)px-\(bucket).png"
             case .plotDevelopment:
-                relativePath = "plot_development/18px/shield-blue-18px-\(bucket).png"
+                relativePath = "plot_development/\(assetSize)px/shield-blue-\(assetSize)px-\(bucket).png"
             case .encumbrance:
-                relativePath = "encumbrance/18px/shield-orange-18px-\(bucket).png"
+                relativePath = "encumbrance/\(assetSize)px/shield-orange-\(assetSize)px-\(bucket).png"
             }
         }
 

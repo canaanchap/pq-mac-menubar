@@ -43,6 +43,12 @@ struct DashboardView: View {
     @State private var mainProgressLoadingActive: Bool = false
     @State private var lastObservedTaskProgressPercent: Double = 0
     @State private var lastObservedTaskDescription: String = ""
+    @State private var showCreateCharacterDialog: Bool = false
+    @State private var newCharacterNameDraft: String = ""
+    @State private var newCharacterRaceDraft: String = ""
+    @State private var newCharacterClassDraft: String = ""
+    @State private var newCharacterStatsDraft: Stats?
+    @State private var previousCharacterStatsDraft: Stats?
 
     private let tickRateOptions: [Double] = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
 
@@ -122,6 +128,9 @@ struct DashboardView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes the saved key and disables automatic portrait generation.")
+        }
+        .sheet(isPresented: $showCreateCharacterDialog) {
+            createCharacterDialog
         }
     }
 
@@ -440,6 +449,9 @@ struct DashboardView: View {
                         }
 
                         HStack {
+                            Button("New Character") {
+                                beginCreateCharacterDialog()
+                            }
                             Button("Delete Selected") { appState.deleteSelectedCharacter() }
                                 .disabled(appState.selectedCharacterID == nil)
                             Button("Upload (Import)") { appState.importCharacterInteractive() }
@@ -737,7 +749,7 @@ struct DashboardView: View {
 
                 GroupBox("Visuals") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Beta re-entry load mask", isOn: Binding(
+                        Toggle("Re-entry load mask", isOn: Binding(
                             get: { appState.betaReentryLoadMaskEnabled },
                             set: { appState.betaReentryLoadMaskEnabled = $0 }
                         ))
@@ -941,6 +953,147 @@ struct DashboardView: View {
                     overviewMaskVisible = false
                 }
             }
+        }
+    }
+
+    private var createCharacterDialog: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("New Character")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                Button {
+                    showCreateCharacterDialog = false
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+            }
+
+            TextField("Name", text: $newCharacterNameDraft)
+
+            Picker("Race", selection: $newCharacterRaceDraft) {
+                ForEach(Array(appState.dataBundle.races.map(\.name).enumerated()), id: \.offset) { _, race in
+                    Text(race).tag(race)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Class", selection: $newCharacterClassDraft) {
+                ForEach(Array(appState.dataBundle.classes.map(\.name).enumerated()), id: \.offset) { _, cls in
+                    Text(cls).tag(cls)
+                }
+            }
+            .pickerStyle(.menu)
+
+            GroupBox("Rolled Stats") {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let s = newCharacterStatsDraft {
+                        createStatLine("STR", s[.strength])
+                        createStatLine("CON", s[.condition])
+                        createStatLine("DEX", s[.dexterity])
+                        createStatLine("INT", s[.intelligence])
+                        createStatLine("WIS", s[.wisdom])
+                        createStatLine("CHA", s[.charisma])
+                        createStatLine("HP Max", s[.hpMax])
+                        createStatLine("MP Max", s[.mpMax])
+                    }
+                }
+            }
+
+            HStack {
+                Button("Roll") {
+                    previousCharacterStatsDraft = newCharacterStatsDraft
+                    newCharacterStatsDraft = appState.rollStats()
+                }
+                Button("Unroll") {
+                    guard let previousCharacterStatsDraft else { return }
+                    newCharacterStatsDraft = previousCharacterStatsDraft
+                    self.previousCharacterStatsDraft = nil
+                }
+                .disabled(previousCharacterStatsDraft == nil)
+                Spacer()
+            }
+
+            HStack {
+                Button("Create to Roster") {
+                    createCharacterFromDialog(startImmediately: false, randomize: false)
+                }
+                Button("Create and Start") {
+                    createCharacterFromDialog(startImmediately: true, randomize: false)
+                }
+            }
+
+            HStack {
+                Button("Randomize + Create to Roster") {
+                    createCharacterFromDialog(startImmediately: false, randomize: true)
+                }
+                Button("Randomize + Start") {
+                    createCharacterFromDialog(startImmediately: true, randomize: true)
+                }
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 520)
+        .onExitCommand {
+            showCreateCharacterDialog = false
+        }
+    }
+
+    private func beginCreateCharacterDialog() {
+        newCharacterNameDraft = ""
+        newCharacterRaceDraft = appState.dataBundle.races.first?.name ?? "Half Orc"
+        newCharacterClassDraft = appState.dataBundle.classes.first?.name ?? "Ur-Paladin"
+        newCharacterStatsDraft = appState.rollStats()
+        previousCharacterStatsDraft = nil
+        showCreateCharacterDialog = true
+    }
+
+    private func createCharacterFromDialog(startImmediately: Bool, randomize: Bool) {
+        var name = newCharacterNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        var race = newCharacterRaceDraft
+        var className = newCharacterClassDraft
+        var stats = newCharacterStatsDraft ?? appState.rollStats()
+
+        if randomize {
+            name = appState.generateFantasyName()
+            race = appState.dataBundle.races.randomElement()?.name ?? race
+            className = appState.dataBundle.classes.randomElement()?.name ?? className
+            stats = appState.rollStats()
+        } else if name.isEmpty {
+            name = "Hero \(Int.random(in: 100...999))"
+        }
+
+        if startImmediately && appState.sessionStarted {
+            let ok = NSAlert.runAskYesNo(
+                title: "Close current character?",
+                message: "Current character will be saved and closed before starting the new one."
+            )
+            if !ok {
+                return
+            }
+            appState.closeCurrentCharacter()
+        }
+
+        appState.createCharacter(
+            name: name,
+            race: race,
+            className: className,
+            stats: stats,
+            startImmediately: startImmediately
+        )
+        showCreateCharacterDialog = false
+        if startImmediately {
+            selectedTab = .overview
+        }
+    }
+
+    private func createStatLine(_ label: String, _ value: Int) -> some View {
+        HStack {
+            Text(label)
+                .frame(width: 70, alignment: .leading)
+            Text("\(value)")
+            Spacer()
         }
     }
 }

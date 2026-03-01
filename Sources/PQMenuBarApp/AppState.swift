@@ -121,7 +121,11 @@ final class AppState: ObservableObject {
             let savedTickRate = UserDefaults.standard.double(forKey: Self.tickRateDefaultsKey)
             tickRateMultiplier = savedTickRate > 0 ? savedTickRate : 1.0
             persistentDashboardWindow = UserDefaults.standard.bool(forKey: Self.persistentDashboardWindowDefaultsKey)
-            betaReentryLoadMaskEnabled = UserDefaults.standard.bool(forKey: Self.betaReentryMaskDefaultsKey)
+            if UserDefaults.standard.object(forKey: Self.betaReentryMaskDefaultsKey) == nil {
+                betaReentryLoadMaskEnabled = true
+            } else {
+                betaReentryLoadMaskEnabled = UserDefaults.standard.bool(forKey: Self.betaReentryMaskDefaultsKey)
+            }
             menubarTrackByCharacterID = Self.loadMenubarTrackMap()
             if UserDefaults.standard.object(forKey: Self.showLevelLabelInMenubarDefaultsKey) == nil {
                 showLevelLabelInMenubar = true
@@ -382,14 +386,18 @@ final class AppState: ObservableObject {
         refreshPortraitForCurrentCharacter()
     }
 
-    func createCharacter(name: String, race: String, className: String, stats: Stats? = nil) {
+    func createCharacter(name: String, race: String, className: String, stats: Stats? = nil, startImmediately: Bool = true) {
         let newStats = stats ?? rollStats()
         let c = PlayerState(name: name, race: race, characterClass: className, stats: newStats)
         roster.append(c)
         selectedCharacterID = c.id
         persistRoster()
         refreshPortraitForCurrentCharacter()
-        start(character: c)
+        if startImmediately {
+            start(character: c)
+        } else {
+            flash("Created \(c.name) in roster.")
+        }
     }
 
     func requestDashboardTab(_ tab: String) {
@@ -1611,7 +1619,7 @@ private struct ImportedPlayer: Codable {
     }
 }
 
-private extension NSAlert {
+extension NSAlert {
     static func runAskYesNo(title: String, message: String) -> Bool {
         let alert = NSAlert()
         alert.messageText = title
