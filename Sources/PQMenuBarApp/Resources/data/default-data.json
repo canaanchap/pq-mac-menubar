@@ -1671,7 +1671,7 @@
     {
       "name": "Black Dragon",
       "level": 7,
-      "item": null
+      "item": "black dragon scale"
     },
     {
       "name": "Plaid Dragon",
@@ -1681,12 +1681,12 @@
     {
       "name": "Blue Dragon",
       "level": 9,
-      "item": null
+      "item": "blue dragon eyeball"
     },
     {
       "name": "Beige Dragon",
       "level": 9,
-      "item": null
+      "item": "paper"
     },
     {
       "name": "Brass Dragon",
@@ -1696,7 +1696,7 @@
     {
       "name": "Tin Dragon",
       "level": 8,
-      "item": null
+      "item": "can"
     },
     {
       "name": "Bronze Dragon",
@@ -1721,12 +1721,12 @@
     {
       "name": "Green Dragon",
       "level": 8,
-      "item": null
+      "item": "green dragon ear"
     },
     {
       "name": "Platinum Dragon",
       "level": 21,
-      "item": null
+      "item": "bar of platinum"
     },
     {
       "name": "Red Dragon",
@@ -1736,7 +1736,7 @@
     {
       "name": "Silver Dragon",
       "level": 10,
-      "item": null
+      "item": "coin"
     },
     {
       "name": "White Dragon",
@@ -1841,7 +1841,7 @@
     {
       "name": "Ghost",
       "level": 10,
-      "item": null
+      "item": "essence"
     },
     {
       "name": "Ghoul",
@@ -2026,7 +2026,7 @@
     {
       "name": "Invisible Stalker",
       "level": 8,
-      "item": null
+      "item": "footprint"
     },
     {
       "name": "Iron Peasant",
@@ -2521,7 +2521,7 @@
     {
       "name": "Fly",
       "level": 0,
-      "item": null
+      "item": "trap"
     },
     {
       "name": "Hogbird",
@@ -2657,7 +2657,115 @@
       "name": "Zephyr Djinn",
       "level": 14,
       "item": "bottle"
-    }
+    },
+    { "name": "Soldier Ant", "level": 2, "item": "serrated antenna" },
+    { "name": "Ant Queen", "level": 4, "item": "royal antenna" },
+
+    { "name": "Chitin-plated Anhkheg", "level": 12, "item": "reinforced chitin" },
+    { "name": "Siege Anhkheg", "level": 24, "item": "siege chitin" },
+
+    { "name": "Feral Ape", "level": 8, "item": "cracked knuckle" },
+    { "name": "Ape Alpha", "level": 16, "item": "alpha knuckle" },
+
+    { "name": "Paranoia Beholder", "level": 20, "item": "twitching eyestalk" },
+    { "name": "Beholder Overmind", "level": 40, "item": "overmind eyestalk" },
+
+    { "name": "Barrel-Bellied Bacon Elemental", "level": 20, "item": "crispy bit" },
+    { "name": "Apocalyptic Bacon Elemental", "level": 40, "item": "mythic bacon bit" },
+
+    { "name": "Razor Centipede", "level": 2, "item": "barbed leg" },
+    { "name": "Emperor Centipede", "level": 4, "item": "emperor leg" },
+
+    { "name": "Horse Fly", "level": 2, "item": "wing" },
+    { "name": "Supreme Horse Fly", "level": 4, "item": "supreme wing" },
+
+    { "name": "Icky Ghast", "level": 8, "item": "icky vomit" },
+    { "name": "Ghast King", "level": 16, "item": "kingly vomit" },
+
+    { "name": "Goblin Cutpurse", "level": 2, "item": "notched ear" },
+    { "name": "Goblin Warlord", "level": 4, "item": "warlord ear" },
+
+    { "name": "Ogre Bruiser", "level": 8, "item": "bloodied talon" },
+    { "name": "Ogre Bonecruncher", "level": 16, "item": "bonecruncher talon" },
+
+    { "name": "Bilious Owlbear", "level": 10, "item": "bristled feather" },
+    { "name": "Owlbear Matriarch", "level": 20, "item": "matriarch feather" },
+
+    { "name": "Ravenous Rust Monster", "level": 10, "item": "iron shavings" },
+    { "name": "Rust Monster Forge-Eater", "level": 20, "item": "enchanted shavings" },
+
+    { "name": "Grim Troll", "level": 12, "item": "thick hide" },
+    { "name": "Troll Regenerator Prime", "level": 24, "item": "prime hide" },
+
+    { "name": "Lich Adept", "level": 22, "item": "black crown" },
+    { "name": "Lich Sovereign", "level": 44, "item": "sovereign crown" },
+
+    { "name": "Saltwater Pirate", "level": 2, "item": "booty" },
+    { "name": "Dread Pirate Captain", "level": 4, "item": "captain's booty" },
+
+    { "name": "Pale Wight", "level": 8, "item": "wheezing lung" },
+    { "name": "Wight Duke", "level": 16, "item": "ducal lung" },
+
+    { "name": "Wyvern Skirmisher", "level": 14, "item": "ragged wing" },
+    { "name": "Wyvern Tyrant", "level": 28, "item": "tyrant wing" },
+
+    { "name": "Red-Flag Unicorn", "level": 8, "item": "hot-blood" },
+    { "name": "Unicorn of Unreasonable Standards", "level": 16, "item": "pristine blood" },
+
+
+    { "name": "Frog of Unwise Confidence", "level": 4, "item": "leg" },
+    { "name": "Frog of Absolute Audacity", "level": 8, "item": "golden leg" },
+
+    { "name": "Webspinner Spider", "level": 4, "item": "sticky web" },
+    { "name": "Nightmare Spider", "level": 8, "item": "nightmare web" },
+
+    { "name": "Vampire Lordling", "level": 32, "item": "perfumed pancreas" },
+    { "name": "Vampire Blood-Emperor", "level": 64, "item": "imperial pancreas" },
+
+    { "name": "Mind Flayer Savant", "level": 32, "item": "psionic tentacle" },
+    { "name": "Mind Flayer Grand Architect", "level": 64, "item": "architect tentacle" },
+
+    { "name": "Hydra Broodmother", "level": 32, "item": "gyrum gland" },
+    { "name": "Hydra World-Serpent", "level": 64, "item": "world-serpent gyrum" },
+
+    { "name": "Roc Stormwing", "level": 72, "item": "storm wing" },
+    { "name": "Roc Sky-Titan", "level": 144, "item": "sky-titan wing" },
+
+    { "name": "Titan Warstrider", "level": 80, "item": "war sandal" },
+    { "name": "Titan Godstep", "level": 160, "item": "godstep sandal" },
+
+    { "name": "Treant Ironroot", "level": 40, "item": "hardened acorn" },
+    { "name": "Treant Worldroot", "level": 80, "item": "worldroot acorn" },
+
+    { "name": "Ice Devil Cold Magistrate", "level": 44, "item": "black snow" },
+    { "name": "Ice Devil Absolute Zero", "level": 88, "item": "void snow" },
+
+    { "name": "Pit Fiend Taskmaster", "level": 52, "item": "hellseed" },
+    { "name": "Pit Fiend Infernal CEO", "level": 104, "item": "executive hellseed" },
+
+    { "name": "Ankylosaurus Bunkerback", "level": 36, "item": "spiked tail" },
+    { "name": "Ankylosaurus Fortressback", "level": 72, "item": "fortress tail" },
+
+    { "name": "Stegosaurus Plate Baron", "level": 72, "item": "razor plate" },
+    { "name": "Stegosaurus Plate Emperor", "level": 144, "item": "emperor plate" },
+
+    { "name": "Kraken Spawn Tide-Ripper", "level": 68, "item": "hooked beak" },
+    { "name": "Kraken Spawn Abyss Regent", "level": 136, "item": "regal beak" },
+
+    { "name": "Wyrm Patriarch Scale-Sire", "level": 120, "item": "ancient tooth" },
+    { "name": "Wyrm Patriarch Final Patriarch", "level": 240, "item": "final tooth" },
+
+    { "name": "Ebon Seraph Duskblade", "level": 64, "item": "void feather" },
+    { "name": "Ebon Seraph Black Halo", "level": 128, "item": "halo feather" },
+
+    { "name": "Ash Warden Cinder Marshal", "level": 32, "item": "smoldering cinder" },
+    { "name": "Ash Warden Ash Imperator", "level": 64, "item": "imperial cinder" },
+
+    { "name": "Cinder Witch Ember Matron", "level": 40, "item": "black candle" },
+    { "name": "Cinder Witch Pyre Oracle", "level": 80, "item": "oracle candle" },
+
+    { "name": "Jellyrock Chunklord", "level": 36, "item": "rootseedling" },
+    { "name": "Jellyrock Mountain-of-Jam", "level": 72, "item": "mythic seedling" }
   ],
   "races": [
     {

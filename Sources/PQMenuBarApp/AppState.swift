@@ -135,9 +135,12 @@ final class AppState: ObservableObject {
 
             let userDataURL = dataDirectory.data.appendingPathComponent("default-data.json")
             try Self.ensureDefaultData(at: userDataURL)
-            let initialDataBundle = try PQDataLoader.load(from: userDataURL)
+            let (initialDataBundle, initialModFiles, initialWarnings) = try Self.loadDataWithMods(
+                baseURL: userDataURL,
+                modsDirectory: dataDirectory.mods
+            )
             dataBundle = initialDataBundle
-            dataValidationReport = Self.buildValidationReport(for: initialDataBundle, modFiles: [], warnings: [])
+            dataValidationReport = Self.buildValidationReport(for: initialDataBundle, modFiles: initialModFiles, warnings: initialWarnings)
             portraitPromptTemplateURL = dataDirectory.data.appendingPathComponent("portrait-prompt.txt")
             try Self.ensurePortraitPromptTemplate(at: portraitPromptTemplateURL)
 
@@ -354,7 +357,7 @@ final class AppState: ObservableObject {
         selectedCharacterID = character.id
         lastSeenLevelByCharacterID[character.id] = character.level
         persistRoster()
-        refreshPortraitForCurrentCharacter()
+        portraitImageURL = latestPortraitURL(for: character.id)
         if emitFlash {
             flash("Started \(character.name).")
         }
@@ -392,10 +395,10 @@ final class AppState: ObservableObject {
         roster.append(c)
         selectedCharacterID = c.id
         persistRoster()
-        refreshPortraitForCurrentCharacter()
         if startImmediately {
             start(character: c)
         } else {
+            portraitImageURL = latestPortraitURL(for: c.id)
             flash("Created \(c.name) in roster.")
         }
     }
@@ -882,12 +885,23 @@ final class AppState: ObservableObject {
 
         var warnings: [String] = []
         var modNames: [String] = []
-        let decoder = JSONDecoder()
         for modURL in modURLs {
             do {
                 let data = try Data(contentsOf: modURL)
-                let patch = try decoder.decode(ModPatchBundle.self, from: data)
-                bundle = merge(base: bundle, patch: patch)
+                let key = modURL.deletingPathExtension().lastPathComponent
+                if Self.supportedModKeys.contains(key) {
+                    let obj = try JSONSerialization.jsonObject(with: data, options: [])
+                    guard let arr = obj as? [Any] else {
+                        warnings.append("Skipped \(modURL.lastPathComponent): expected top-level array for key '\(key)'")
+                        continue
+                    }
+                    try Self.applyArrayMod(key: key, entries: arr, bundle: &bundle, sourceName: modURL.lastPathComponent, warnings: &warnings)
+                } else {
+                    // Backward compatibility: old patch-bundle format.
+                    let decoder = JSONDecoder()
+                    let patch = try decoder.decode(ModPatchBundle.self, from: data)
+                    bundle = merge(base: bundle, patch: patch)
+                }
                 modNames.append(modURL.lastPathComponent)
             } catch {
                 warnings.append("Skipped \(modURL.lastPathComponent): \(error.localizedDescription)")
@@ -920,6 +934,162 @@ final class AppState: ObservableObject {
         return out
     }
 
+    private nonisolated static let supportedModKeys: Set<String> = [
+        "spells", "offenseAttrib", "defenseAttrib", "offenseBad", "defenseBad",
+        "shields", "armors", "weapons", "specials", "itemAttrib", "itemOfs",
+        "boringItems", "monsters", "races", "classes", "titles",
+        "impressiveTitles", "primeStats", "equipmentTypes",
+    ]
+
+    nonisolated private static func applyArrayMod(
+        key: String,
+        entries: [Any],
+        bundle: inout PQDataBundle,
+        sourceName: String,
+        warnings: inout [String]
+    ) throws {
+        switch key {
+        case "spells":
+            mergeStringEntries(existing: &bundle.spells, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "specials":
+            mergeStringEntries(existing: &bundle.specials, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "itemAttrib":
+            mergeStringEntries(existing: &bundle.itemAttrib, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "itemOfs":
+            mergeStringEntries(existing: &bundle.itemOfs, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "boringItems":
+            mergeStringEntries(existing: &bundle.boringItems, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "titles":
+            mergeStringEntries(existing: &bundle.titles, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "impressiveTitles":
+            mergeStringEntries(existing: &bundle.impressiveTitles, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "primeStats":
+            mergeStringEntries(existing: &bundle.primeStats, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "equipmentTypes":
+            mergeStringEntries(existing: &bundle.equipmentTypes, entries: entries, sourceName: sourceName, warnings: &warnings)
+        case "offenseAttrib":
+            try mergeNamedObjects(existing: &bundle.offenseAttrib, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "defenseAttrib":
+            try mergeNamedObjects(existing: &bundle.defenseAttrib, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "offenseBad":
+            try mergeNamedObjects(existing: &bundle.offenseBad, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "defenseBad":
+            try mergeNamedObjects(existing: &bundle.defenseBad, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "shields":
+            try mergeNamedObjects(existing: &bundle.shields, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "armors":
+            try mergeNamedObjects(existing: &bundle.armors, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "weapons":
+            try mergeNamedObjects(existing: &bundle.weapons, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "monsters":
+            try mergeNamedObjects(existing: &bundle.monsters, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "races":
+            try mergeNamedObjects(existing: &bundle.races, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        case "classes":
+            try mergeNamedObjects(existing: &bundle.classes, entries: entries, sourceName: sourceName, warnings: &warnings) { $0.name }
+        default:
+            warnings.append("Skipped \(sourceName): unsupported mod key '\(key)'")
+        }
+    }
+
+    nonisolated private static func mergeStringEntries(
+        existing: inout [String],
+        entries: [Any],
+        sourceName: String,
+        warnings: inout [String]
+    ) {
+        for (idx, raw) in entries.enumerated() {
+            var value: String?
+            var include = true
+            var mask = false
+            if let s = raw as? String {
+                value = s
+            } else if let dict = raw as? [String: Any] {
+                value = (dict["value"] as? String) ?? (dict["name"] as? String)
+                include = dict["include"] as? Bool ?? true
+                mask = dict["mask"] as? Bool ?? false
+            } else {
+                warnings.append("Skipped \(sourceName)[\(idx)]: expected string or object")
+                continue
+            }
+
+            guard let v = value?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else {
+                warnings.append("Skipped \(sourceName)[\(idx)]: missing value/name")
+                continue
+            }
+
+            if !include {
+                existing.removeAll(where: { $0.caseInsensitiveCompare(v) == .orderedSame })
+                continue
+            }
+            if mask {
+                existing.removeAll(where: { $0.caseInsensitiveCompare(v) == .orderedSame })
+                existing.append(v)
+                continue
+            }
+            if !existing.contains(where: { $0.caseInsensitiveCompare(v) == .orderedSame }) {
+                existing.append(v)
+            }
+        }
+    }
+
+    nonisolated private static func mergeNamedObjects<T: Decodable>(
+        existing: inout [T],
+        entries: [Any],
+        sourceName: String,
+        warnings: inout [String],
+        nameFor: (T) -> String
+    ) throws {
+        func normalized(_ s: String) -> String {
+            s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
+        for (idx, raw) in entries.enumerated() {
+            guard let dict = raw as? [String: Any] else {
+                warnings.append("Skipped \(sourceName)[\(idx)]: expected object entry")
+                continue
+            }
+
+            let include = dict["include"] as? Bool ?? true
+            let mask = dict["mask"] as? Bool ?? false
+            let rawName = (dict["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            var clean = dict
+            clean.removeValue(forKey: "mask")
+            clean.removeValue(forKey: "include")
+
+            let data = try JSONSerialization.data(withJSONObject: clean, options: [])
+            let item: T
+            do {
+                item = try JSONDecoder().decode(T.self, from: data)
+            } catch {
+                warnings.append("Skipped \(sourceName)[\(idx)]: decode error (\(error.localizedDescription))")
+                continue
+            }
+
+            let id = normalized(rawName.isEmpty ? nameFor(item) : rawName)
+            guard !id.isEmpty else {
+                warnings.append("Skipped \(sourceName)[\(idx)]: missing name")
+                continue
+            }
+
+            if !include {
+                existing.removeAll(where: { normalized(nameFor($0)) == id })
+                continue
+            }
+
+            if mask {
+                existing.removeAll(where: { normalized(nameFor($0)) == id })
+                existing.append(item)
+                continue
+            }
+
+            if !existing.contains(where: { normalized(nameFor($0)) == id }) {
+                existing.append(item)
+            }
+        }
+    }
+
     nonisolated private static func buildValidationReport(for bundle: PQDataBundle, modFiles: [String], warnings: [String]) -> String {
         var lines: [String] = []
         lines.append("Loaded base data + \(modFiles.count) mod file(s).")
@@ -940,9 +1110,15 @@ final class AppState: ObservableObject {
         if bundle.weapons.isEmpty || bundle.armors.isEmpty || bundle.shields.isEmpty {
             checks.append("ERROR: one or more equipment pools are empty")
         }
-        let badMonsters = bundle.monsters.filter { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.level <= 0 }
+        let badMonsters = bundle.monsters.filter { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.level < 0 }
         if !badMonsters.isEmpty {
-            checks.append("WARN: \(badMonsters.count) monster entries have blank name or non-positive level")
+            checks.append("WARN: \(badMonsters.count) monster entries have blank name or negative level")
+        }
+        let missingDrops = bundle.monsters.filter {
+            ($0.item?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+        }
+        if !missingDrops.isEmpty {
+            checks.append("WARN: \(missingDrops.count) monster entries have missing item drop; runtime uses special-item fallback")
         }
         checks.append(contentsOf: warnings.map { "WARN: \($0)" })
         if checks.isEmpty {

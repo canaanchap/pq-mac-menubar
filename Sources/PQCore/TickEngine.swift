@@ -83,14 +83,14 @@ public struct TickEngine {
             if let task = player.task {
                 switch task.kind {
                 case .kill:
-                    if task.monster?.item == nil {
+                    if let m = task.monster, let rawItem = m.item?.trimmingCharacters(in: .whitespacesAndNewlines), !rawItem.isEmpty {
+                        let drop = "\(m.name) \(rawItem)".lowercased()
+                        player.addInventoryItem(drop, quantity: 1)
+                        events.append(.init(message: "Looted \(PQLingo.indefinite(drop, qty: 1))."))
+                    } else {
                         let won = specialItem(rng: &rng)
                         player.addInventoryItem(won, quantity: 1)
                         events.append(.init(message: "Gained \(PQLingo.indefinite(won, qty: 1))."))
-                    } else if let m = task.monster, let item = m.item {
-                        let drop = "\(m.name) \(item)".lowercased()
-                        player.addInventoryItem(drop, quantity: 1)
-                        events.append(.init(message: "Looted \(PQLingo.indefinite(drop, qty: 1))."))
                     }
 
                 case .buy:
