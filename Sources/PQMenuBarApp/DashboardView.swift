@@ -45,6 +45,7 @@ struct DashboardView: View {
     @State private var lastObservedTaskDescription: String = ""
     @State private var showCreateCharacterDialog: Bool = false
     @State private var newCharacterNameDraft: String = ""
+    @State private var newCharacterNameSuggestion: String = ""
     @State private var newCharacterRaceDraft: String = ""
     @State private var newCharacterClassDraft: String = ""
     @State private var newCharacterStatsDraft: Stats?
@@ -970,7 +971,7 @@ struct DashboardView: View {
                 .buttonStyle(.plain)
             }
 
-            TextField("Name", text: $newCharacterNameDraft)
+            TextField(newCharacterNameSuggestion.isEmpty ? "Name" : newCharacterNameSuggestion, text: $newCharacterNameDraft)
 
             Picker("Race", selection: $newCharacterRaceDraft) {
                 ForEach(Array(appState.dataBundle.races.map(\.name).enumerated()), id: \.offset) { _, race in
@@ -1042,6 +1043,7 @@ struct DashboardView: View {
 
     private func beginCreateCharacterDialog() {
         newCharacterNameDraft = ""
+        newCharacterNameSuggestion = appState.generateFantasyName()
         newCharacterRaceDraft = appState.dataBundle.races.first?.name ?? "Half Orc"
         newCharacterClassDraft = appState.dataBundle.classes.first?.name ?? "Ur-Paladin"
         newCharacterStatsDraft = appState.rollStats()
@@ -1061,7 +1063,7 @@ struct DashboardView: View {
             className = appState.dataBundle.classes.randomElement()?.name ?? className
             stats = appState.rollStats()
         } else if name.isEmpty {
-            name = "Hero \(Int.random(in: 100...999))"
+            name = newCharacterNameSuggestion.isEmpty ? appState.generateFantasyName() : newCharacterNameSuggestion
         }
 
         if startImmediately && appState.sessionStarted {
@@ -1082,6 +1084,7 @@ struct DashboardView: View {
             stats: stats,
             startImmediately: startImmediately
         )
+        newCharacterNameSuggestion = ""
         showCreateCharacterDialog = false
         if startImmediately {
             selectedTab = .overview

@@ -14,6 +14,7 @@ struct PopoverView: View {
 
     @State private var creatingCharacter: Bool = false
     @State private var newCharacterName: String = ""
+    @State private var suggestedCharacterName: String = ""
     @State private var newCharacterRace: String = ""
     @State private var newCharacterClass: String = ""
     @State private var rolledStats: Stats?
@@ -110,7 +111,7 @@ struct PopoverView: View {
             Text("Create Character")
                 .font(.title3.weight(.bold))
 
-            TextField("Name", text: $newCharacterName)
+            TextField(suggestedCharacterName.isEmpty ? "Name" : suggestedCharacterName, text: $newCharacterName)
 
             Picker("Race", selection: $newCharacterRace) {
                 ForEach(Array(appState.dataBundle.races.map(\.name).enumerated()), id: \.offset) { _, race in
@@ -154,7 +155,7 @@ struct PopoverView: View {
                 .disabled(previousRolledStats == nil)
                 Button("Create") {
                     let name = newCharacterName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let finalName = name.isEmpty ? "Hero \(Int.random(in: 100...999))" : name
+                    let finalName = name.isEmpty ? (suggestedCharacterName.isEmpty ? appState.generateFantasyName() : suggestedCharacterName) : name
                     appState.createCharacter(
                         name: finalName,
                         race: newCharacterRace,
@@ -163,6 +164,7 @@ struct PopoverView: View {
                     )
                     creatingCharacter = false
                     previousRolledStats = nil
+                    suggestedCharacterName = ""
                 }
                 Button("Randomize + Start") {
                     let randomRace = appState.dataBundle.races.randomElement()?.name ?? "Half Orc"
@@ -187,6 +189,7 @@ struct PopoverView: View {
                 Button("Cancel") {
                     creatingCharacter = false
                     previousRolledStats = nil
+                    suggestedCharacterName = ""
                 }
             }
         }
@@ -267,6 +270,8 @@ struct PopoverView: View {
         if newCharacterClass.isEmpty {
             newCharacterClass = appState.dataBundle.classes.first?.name ?? "Ur-Paladin"
         }
+        suggestedCharacterName = appState.generateFantasyName()
+        newCharacterName = ""
         rolledStats = appState.rollStats()
         previousRolledStats = nil
         creatingCharacter = true
