@@ -25,6 +25,7 @@ struct PQMenuBarApp: App {
             let activeCharacter = appState.state.activeCharacter
             let trackMode = appState.currentMenubarTrackMode
             let progressPercent = appState.sessionStarted ? appState.menubarProgressPercent(for: activeCharacter) : 0
+            let labelText = appState.menubarLabelText(started: appState.sessionStarted, character: activeCharacter)
             let shieldImage = MenubarShieldIconCatalog.shared.image(
                 started: appState.sessionStarted,
                 mode: trackMode,
@@ -39,7 +40,7 @@ struct PQMenuBarApp: App {
                 } else {
                     Image(systemName: "shield")
                 }
-                Text(appState.sessionStarted ? "Lv \(appState.state.activeCharacter.level)" : "Lv ?")
+                Text(labelText)
                 if appState.sessionStarted && appState.state.isPaused {
                     Image(systemName: "pause.fill")
                         .font(.system(size: 9, weight: .bold))
@@ -81,8 +82,10 @@ private final class MenubarShieldIconCatalog {
                 relativePath = "current_task/18px/shield-red-18px-\(bucket).png"
             case .currentQuest:
                 relativePath = "current_quest/18px/shield-yellow-18px-\(bucket).png"
+            case .plotDevelopment:
+                relativePath = "plot_development/18px/shield-blue-18px-\(bucket).png"
             case .encumbrance:
-                relativePath = "encumbrance/18px/shield-dark_yellow-18px-\(bucket).png"
+                relativePath = "encumbrance/18px/shield-orange-18px-\(bucket).png"
             }
         }
 

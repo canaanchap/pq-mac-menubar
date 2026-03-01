@@ -41,6 +41,7 @@ enum MenubarIconTrackMode: String, Codable, CaseIterable, Identifiable {
     case level = "Level"
     case currentTask = "Current Task"
     case currentQuest = "Current Quest"
+    case plotDevelopment = "Plot Development"
     case encumbrance = "Encumbrance"
 
     var id: String { rawValue }
@@ -81,6 +82,11 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(tickRateMultiplier, forKey: Self.tickRateDefaultsKey)
         }
     }
+    @Published var showLevelLabelInMenubar: Bool {
+        didSet {
+            UserDefaults.standard.set(showLevelLabelInMenubar, forKey: Self.showLevelLabelInMenubarDefaultsKey)
+        }
+    }
 
     let dataDirectory: DataDirectory
     let saveStore: SaveStore
@@ -96,6 +102,7 @@ final class AppState: ObservableObject {
     private static let persistentDashboardWindowDefaultsKey = "pq.dashboard.persistentWindow"
     private static let betaReentryMaskDefaultsKey = "pq.debug.betaReentryMask"
     private static let menubarTrackByCharacterDefaultsKey = "pq.menubar.trackByCharacter"
+    private static let showLevelLabelInMenubarDefaultsKey = "pq.menubar.showLevelLabel"
     private var portraitGenerationInFlightCharacterIDs: Set<UUID> = []
     private var lastSeenLevelByCharacterID: [UUID: Int] = [:]
     private var logArchiveTimer: DispatchSourceTimer?
@@ -116,6 +123,11 @@ final class AppState: ObservableObject {
             persistentDashboardWindow = UserDefaults.standard.bool(forKey: Self.persistentDashboardWindowDefaultsKey)
             betaReentryLoadMaskEnabled = UserDefaults.standard.bool(forKey: Self.betaReentryMaskDefaultsKey)
             menubarTrackByCharacterID = Self.loadMenubarTrackMap()
+            if UserDefaults.standard.object(forKey: Self.showLevelLabelInMenubarDefaultsKey) == nil {
+                showLevelLabelInMenubar = true
+            } else {
+                showLevelLabelInMenubar = UserDefaults.standard.bool(forKey: Self.showLevelLabelInMenubarDefaultsKey)
+            }
 
             let userDataURL = dataDirectory.data.appendingPathComponent("default-data.json")
             try Self.ensureDefaultData(at: userDataURL)
@@ -236,11 +248,46 @@ final class AppState: ObservableObject {
             let bar = character.questBook.questBar
             guard bar.max > 0 else { return 0 }
             return (bar.position / bar.max) * 100.0
+        case .plotDevelopment:
+            let bar = character.questBook.plotBar
+            guard bar.max > 0 else { return 0 }
+            return (bar.position / bar.max) * 100.0
         case .encumbrance:
             guard character.inventoryCapacity > 0 else { return 0 }
             let used = character.inventoryItems.reduce(0) { $0 + $1.quantity }
             return (Double(used) / Double(character.inventoryCapacity)) * 100.0
         }
+    }
+
+    func menubarLabelText(started: Bool, character: PlayerState) -> String {
+        guard started else { return "Lv ?" }
+        let mode = menubarTrackMode(for: character)
+        if mode == .level || showLevelLabelInMenubar {
+            return "Lv \(character.level)"
+        }
+        switch mode {
+        case .level:
+            return "Lv \(character.level)"
+        case .currentTask:
+            return leadingWordLabel(from: character.task?.description, fallback: "Task")
+        case .currentQuest:
+            return leadingWordLabel(from: character.questBook.currentQuest, fallback: "Quest")
+        case .plotDevelopment:
+            if character.questBook.act <= 0 {
+                return "Act 0"
+            }
+            return "Act \(PQLingo.toRoman(character.questBook.act))"
+        case .encumbrance:
+            return "Inventory"
+        }
+    }
+
+    private func leadingWordLabel(from source: String?, fallback: String) -> String {
+        guard let source else { return "\(fallback)..." }
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "\(fallback)..." }
+        let first = trimmed.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? fallback
+        return "\(first)..."
     }
 
     func menubarTrackMode(for character: PlayerState) -> MenubarIconTrackMode {

@@ -375,6 +375,9 @@ struct DashboardView: View {
                             .pickerStyle(.menu)
                             .labelsHidden()
                         }
+                        Toggle("Show Level Instead of Selected Progress?", isOn: $appState.showLevelLabelInMenubar)
+                            .toggleStyle(.switch)
+                            .disabled(appState.currentMenubarTrackMode == .level)
                         Toggle("🚧 Compact menubar mode (Coming soon)", isOn: .constant(false))
                             .toggleStyle(.switch)
                             .disabled(true)
