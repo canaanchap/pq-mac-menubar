@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 private struct RosterFile: Codable {
     var activeCharacterID: UUID?
     var characters: [PlayerState]
+    var recentEventsByCharacterID: [String: [GameEvent]]?
 }
 
 private struct ModPatchBundle: Codable {
@@ -51,7 +52,11 @@ enum MenubarIconTrackMode: String, Codable, CaseIterable, Identifiable {
 final class AppState: ObservableObject {
     @Published var state: GameState
     @Published var events: [GameEvent]
-    @Published var compactMode: Bool = false
+    @Published var compactMode: Bool {
+        didSet {
+            UserDefaults.standard.set(compactMode, forKey: Self.compactModeDefaultsKey)
+        }
+    }
     @Published var persistentDashboardWindow: Bool {
         didSet {
             UserDefaults.standard.set(persistentDashboardWindow, forKey: Self.persistentDashboardWindowDefaultsKey)
@@ -87,6 +92,29 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(showLevelLabelInMenubar, forKey: Self.showLevelLabelInMenubarDefaultsKey)
         }
     }
+    @Published var modsFeatureEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(modsFeatureEnabled, forKey: Self.modsFeatureEnabledDefaultsKey)
+            if modsFeatureEnabled {
+                runModDryRunAndEnableIfValid()
+            } else {
+                modsActive = false
+                modsValidationPassed = false
+                modDryRunReport = "Mods disabled."
+                reloadDataAndMods()
+            }
+        }
+    }
+    @Published var modsActive: Bool {
+        didSet {
+            UserDefaults.standard.set(modsActive, forKey: Self.modsActiveDefaultsKey)
+            if modsFeatureEnabled {
+                reloadDataAndMods()
+            }
+        }
+    }
+    @Published var modsValidationPassed: Bool = false
+    @Published var modDryRunReport: String = "No mod validation run yet."
 
     let dataDirectory: DataDirectory
     let saveStore: SaveStore
@@ -103,11 +131,15 @@ final class AppState: ObservableObject {
     private static let betaReentryMaskDefaultsKey = "pq.debug.betaReentryMask"
     private static let menubarTrackByCharacterDefaultsKey = "pq.menubar.trackByCharacter"
     private static let showLevelLabelInMenubarDefaultsKey = "pq.menubar.showLevelLabel"
+    private static let compactModeDefaultsKey = "pq.menubar.compactMode"
+    private static let modsFeatureEnabledDefaultsKey = "pq.mods.featureEnabled"
+    private static let modsActiveDefaultsKey = "pq.mods.active"
     private var portraitGenerationInFlightCharacterIDs: Set<UUID> = []
     private var lastSeenLevelByCharacterID: [UUID: Int] = [:]
     private var logArchiveTimer: DispatchSourceTimer?
     private var lastRosterPersistAt: Date = .distantPast
     private var menubarTrackByCharacterID: [UUID: MenubarIconTrackMode] = [:]
+    private var recentEventsByCharacterID: [UUID: [GameEvent]] = [:]
 
     init() {
         do {
@@ -120,6 +152,7 @@ final class AppState: ObservableObject {
             openAIAPIKey = UserDefaults.standard.string(forKey: Self.openAIAPIKeyDefaultsKey) ?? ""
             let savedTickRate = UserDefaults.standard.double(forKey: Self.tickRateDefaultsKey)
             tickRateMultiplier = savedTickRate > 0 ? savedTickRate : 1.0
+            compactMode = UserDefaults.standard.bool(forKey: Self.compactModeDefaultsKey)
             persistentDashboardWindow = UserDefaults.standard.bool(forKey: Self.persistentDashboardWindowDefaultsKey)
             if UserDefaults.standard.object(forKey: Self.betaReentryMaskDefaultsKey) == nil {
                 betaReentryLoadMaskEnabled = true
@@ -132,27 +165,43 @@ final class AppState: ObservableObject {
             } else {
                 showLevelLabelInMenubar = UserDefaults.standard.bool(forKey: Self.showLevelLabelInMenubarDefaultsKey)
             }
+            let modsFeatureEnabledLoaded = UserDefaults.standard.bool(forKey: Self.modsFeatureEnabledDefaultsKey)
+            let modsActiveLoaded = UserDefaults.standard.bool(forKey: Self.modsActiveDefaultsKey)
+            modsFeatureEnabled = modsFeatureEnabledLoaded
+            modsActive = modsActiveLoaded
 
             let userDataURL = dataDirectory.data.appendingPathComponent("default-data.json")
             try Self.ensureDefaultData(at: userDataURL)
+            try Self.repairUserDataIfInvalid(at: userDataURL)
             let (initialDataBundle, initialModFiles, initialWarnings) = try Self.loadDataWithMods(
                 baseURL: userDataURL,
-                modsDirectory: dataDirectory.mods
+                modsDirectory: dataDirectory.mods,
+                applyMods: modsFeatureEnabledLoaded && modsActiveLoaded
             )
             dataBundle = initialDataBundle
-            dataValidationReport = Self.buildValidationReport(for: initialDataBundle, modFiles: initialModFiles, warnings: initialWarnings)
+            dataValidationReport = Self.buildValidationReport(
+                for: initialDataBundle,
+                modFiles: initialModFiles,
+                warnings: initialWarnings,
+                modsEnabled: modsFeatureEnabledLoaded,
+                modsActive: modsFeatureEnabledLoaded && modsActiveLoaded
+            )
+            let initialModsValidationPassed = initialWarnings.isEmpty
+            modsValidationPassed = initialModsValidationPassed
+            modDryRunReport = Self.buildDryRunReport(modFiles: initialModFiles, warnings: initialWarnings, accepted: initialModsValidationPassed)
             portraitPromptTemplateURL = dataDirectory.data.appendingPathComponent("portrait-prompt.txt")
             try Self.ensurePortraitPromptTemplate(at: portraitPromptTemplateURL)
 
-            let loaded = try Self.loadRoster(from: rosterURL, saveStore: saveStore, data: initialDataBundle)
+            let loaded = try Self.loadRoster(from: rosterURL, saveStore: saveStore)
             roster = loaded.characters
+            recentEventsByCharacterID = loaded.recentEventsByCharacterID
             selectedCharacterID = nil
             sessionStarted = false
             statusMessage = nil
             runtimeStateMarker = .idle
             portraitImageURL = nil
 
-            let initialCharacter = loaded.characters.first ?? Self.defaultCharacter(from: initialDataBundle)
+            let initialCharacter = loaded.characters.first ?? Self.placeholderCharacter()
             let initialState = GameState(activeCharacter: initialCharacter, isPaused: true)
             state = initialState
             events = []
@@ -160,6 +209,9 @@ final class AppState: ObservableObject {
             runtime = GameRuntime(initialState: initialState, data: initialDataBundle, saveStore: saveStore, logStore: logStore)
             runtime.setTickRateMultiplier(tickRateMultiplier)
             startLogArchiveTimer()
+            if modsFeatureEnabledLoaded {
+                runModDryRunAndEnableIfValid()
+            }
 
             runtime.onStateChange = { [weak self] newState in
                 DispatchQueue.main.async {
@@ -186,8 +238,15 @@ final class AppState: ObservableObject {
 
             runtime.onEvent = { [weak self] event in
                 DispatchQueue.main.async {
-                    self?.events.insert(event, at: 0)
-                    self?.events = Array(self?.events.prefix(100) ?? [])
+                    guard let self else { return }
+                    self.events.insert(event, at: 0)
+                    self.events = Array(self.events.prefix(100))
+                    guard self.sessionStarted else { return }
+                    let id = self.state.activeCharacter.id
+                    var history = self.recentEventsByCharacterID[id] ?? []
+                    history.insert(event, at: 0)
+                    self.recentEventsByCharacterID[id] = Array(history.prefix(10))
+                    self.persistRosterIfDue()
                 }
             }
 
@@ -356,6 +415,7 @@ final class AppState: ObservableObject {
         runtimeStateMarker = .running
         selectedCharacterID = character.id
         lastSeenLevelByCharacterID[character.id] = character.level
+        events = recentEventsByCharacterID[character.id] ?? []
         persistRoster()
         portraitImageURL = latestPortraitURL(for: character.id)
         if emitFlash {
@@ -375,6 +435,7 @@ final class AppState: ObservableObject {
         sessionStarted = false
         runtimeStateMarker = .idle
         selectedCharacterID = nil
+        events = []
         portraitGenerationInFlightCharacterIDs.remove(state.activeCharacter.id)
         persistRoster()
         refreshPortraitForCurrentCharacter()
@@ -384,6 +445,7 @@ final class AppState: ObservableObject {
     func deleteSelectedCharacter() {
         guard let id = selectedCharacterID else { return }
         roster.removeAll(where: { $0.id == id })
+        recentEventsByCharacterID[id] = nil
         selectedCharacterID = nil
         persistRoster()
         refreshPortraitForCurrentCharacter()
@@ -394,6 +456,7 @@ final class AppState: ObservableObject {
         let c = PlayerState(name: name, race: race, characterClass: className, stats: newStats)
         roster.append(c)
         selectedCharacterID = c.id
+        recentEventsByCharacterID[c.id] = []
         persistRoster()
         if startImmediately {
             start(character: c)
@@ -414,15 +477,25 @@ final class AppState: ObservableObject {
         runtimeStateMarker = .reloadingData
         let dataURL = dataDirectory.data.appendingPathComponent("default-data.json")
         let modsURL = dataDirectory.mods
+        let applyMods = modsFeatureEnabled && modsActive
+        let modsFeatureEnabledSnapshot = modsFeatureEnabled
 
         Task.detached(priority: .utility) {
             do {
-                let (bundle, modFiles, warnings) = try Self.loadDataWithMods(baseURL: dataURL, modsDirectory: modsURL)
-                let report = Self.buildValidationReport(for: bundle, modFiles: modFiles, warnings: warnings)
+                let (bundle, modFiles, warnings) = try Self.loadDataWithMods(baseURL: dataURL, modsDirectory: modsURL, applyMods: applyMods)
+                let report = Self.buildValidationReport(
+                    for: bundle,
+                    modFiles: modFiles,
+                    warnings: warnings,
+                    modsEnabled: modsFeatureEnabledSnapshot,
+                    modsActive: applyMods
+                )
                 await MainActor.run {
                     self.dataBundle = bundle
                     self.runtime.setDataBundle(bundle)
                     self.dataValidationReport = report
+                    self.modsValidationPassed = warnings.isEmpty
+                    self.modDryRunReport = Self.buildDryRunReport(modFiles: modFiles, warnings: warnings, accepted: warnings.isEmpty)
                     self.runtimeStateMarker = self.sessionStarted ? (self.state.isPaused ? .paused : .running) : .idle
                     self.flash("Data reloaded (\(modFiles.count) mod file\(modFiles.count == 1 ? "" : "s")).")
                 }
@@ -430,6 +503,39 @@ final class AppState: ObservableObject {
                 await MainActor.run {
                     self.runtimeStateMarker = previousRuntimeState
                     self.flash("Reload failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func runModDryRunAndEnableIfValid() {
+        let dataURL = dataDirectory.data.appendingPathComponent("default-data.json")
+        let modsURL = dataDirectory.mods
+        Task.detached(priority: .utility) {
+            do {
+                let (_, modFiles, warnings) = try Self.loadDataWithMods(
+                    baseURL: dataURL,
+                    modsDirectory: modsURL,
+                    applyMods: true
+                )
+                let passed = warnings.isEmpty
+                let report = Self.buildDryRunReport(modFiles: modFiles, warnings: warnings, accepted: passed)
+                await MainActor.run {
+                    self.modsValidationPassed = passed
+                    self.modDryRunReport = report
+                    if !passed {
+                        self.modsActive = false
+                        self.flash("Mods disabled: validation warnings found.")
+                    } else if self.modsActive {
+                        self.reloadDataAndMods()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.modsValidationPassed = false
+                    self.modsActive = false
+                    self.modDryRunReport = "Dry run failed: \(error.localizedDescription)"
+                    self.flash("Mod dry run failed.")
                 }
             }
         }
@@ -821,14 +927,21 @@ final class AppState: ObservableObject {
     private func mergeImportedCharacter(_ c: PlayerState) {
         if let idx = roster.firstIndex(where: { $0.id == c.id }) {
             roster[idx] = c
+            if recentEventsByCharacterID[c.id] == nil {
+                recentEventsByCharacterID[c.id] = []
+            }
             selectedCharacterID = c.id
         } else if let idx = roster.firstIndex(where: { $0.name.caseInsensitiveCompare(c.name) == .orderedSame }) {
             var replaced = c
             replaced.id = roster[idx].id
             roster[idx] = replaced
+            if recentEventsByCharacterID[replaced.id] == nil {
+                recentEventsByCharacterID[replaced.id] = []
+            }
             selectedCharacterID = replaced.id
         } else {
             roster.append(c)
+            recentEventsByCharacterID[c.id] = []
             selectedCharacterID = c.id
         }
         persistRoster()
@@ -876,8 +989,11 @@ final class AppState: ObservableObject {
         return LegacyPKLBridge(converterPath: converter)
     }
 
-    nonisolated private static func loadDataWithMods(baseURL: URL, modsDirectory: URL) throws -> (PQDataBundle, [String], [String]) {
+    nonisolated private static func loadDataWithMods(baseURL: URL, modsDirectory: URL, applyMods: Bool) throws -> (PQDataBundle, [String], [String]) {
         var bundle = try PQDataLoader.load(from: baseURL)
+        if !applyMods {
+            return (bundle, [], [])
+        }
         let fm = FileManager.default
         let modURLs = (try? fm.contentsOfDirectory(at: modsDirectory, includingPropertiesForKeys: nil))?
             .filter { $0.pathExtension.lowercased() == "json" }
@@ -1090,8 +1206,16 @@ final class AppState: ObservableObject {
         }
     }
 
-    nonisolated private static func buildValidationReport(for bundle: PQDataBundle, modFiles: [String], warnings: [String]) -> String {
+    nonisolated private static func buildValidationReport(
+        for bundle: PQDataBundle,
+        modFiles: [String],
+        warnings: [String],
+        modsEnabled: Bool,
+        modsActive: Bool
+    ) -> String {
         var lines: [String] = []
+        lines.append("Mods enabled: \(modsEnabled ? "yes" : "no")")
+        lines.append("Mods active: \(modsActive ? "yes" : "no")")
         lines.append("Loaded base data + \(modFiles.count) mod file(s).")
         if !modFiles.isEmpty {
             lines.append("Mods: \(modFiles.joined(separator: ", "))")
@@ -1127,6 +1251,22 @@ final class AppState: ObservableObject {
 
         lines.append("")
         lines.append(contentsOf: checks)
+        return lines.joined(separator: "\n")
+    }
+
+    nonisolated private static func buildDryRunReport(modFiles: [String], warnings: [String], accepted: Bool) -> String {
+        var lines: [String] = []
+        lines.append("Dry run result: \(accepted ? "PASS" : "FAIL")")
+        lines.append("Mod files found: \(modFiles.count)")
+        if !modFiles.isEmpty {
+            lines.append("Files: \(modFiles.joined(separator: ", "))")
+        }
+        if warnings.isEmpty {
+            lines.append("No warnings.")
+        } else {
+            lines.append("Warnings:")
+            lines.append(contentsOf: warnings.map { "- \($0)" })
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -1318,7 +1458,10 @@ final class AppState: ObservableObject {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
-            let payload = RosterFile(activeCharacterID: selectedCharacterID, characters: roster)
+            let eventMap = recentEventsByCharacterID.reduce(into: [String: [GameEvent]]()) { partial, item in
+                partial[item.key.uuidString] = Array(item.value.prefix(10))
+            }
+            let payload = RosterFile(activeCharacterID: selectedCharacterID, characters: roster, recentEventsByCharacterID: eventMap)
             try encoder.encode(payload).write(to: rosterURL, options: .atomic)
             lastRosterPersistAt = Date()
         } catch {
@@ -1604,39 +1747,40 @@ final class AppState: ObservableObject {
         logArchiveTimer = makeLogArchiveTimer(logStore: logStore)
     }
 
-    private static func loadRoster(from url: URL, saveStore: SaveStore, data: PQDataBundle) throws -> RosterFile {
+    private static func loadRoster(from url: URL, saveStore: SaveStore) throws -> (characters: [PlayerState], recentEventsByCharacterID: [UUID: [GameEvent]]) {
         let fm = FileManager.default
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
         if fm.fileExists(atPath: url.path) {
             let dataBlob = try Data(contentsOf: url)
-            return try decoder.decode(RosterFile.self, from: dataBlob)
+            let decoded = try decoder.decode(RosterFile.self, from: dataBlob)
+            let eventMap = (decoded.recentEventsByCharacterID ?? [:]).reduce(into: [UUID: [GameEvent]]()) { partial, item in
+                guard let id = UUID(uuidString: item.key) else { return }
+                partial[id] = Array(item.value.prefix(10))
+            }
+            return (decoded.characters, eventMap)
         }
 
         if let save = saveStore.load() {
-            return RosterFile(activeCharacterID: save.activeCharacter.id, characters: [save.activeCharacter])
+            return ([save.activeCharacter], [save.activeCharacter.id: []])
         }
 
-        let initial = defaultCharacter(from: data)
-        return RosterFile(activeCharacterID: initial.id, characters: [initial])
+        return ([], [:])
     }
 
-    private static func defaultCharacter(from data: PQDataBundle) -> PlayerState {
+    private static func placeholderCharacter() -> PlayerState {
         let stats = Stats(values: [
-            StatType.strength.rawValue: 10,
-            StatType.condition.rawValue: 10,
-            StatType.dexterity.rawValue: 10,
-            StatType.intelligence.rawValue: 10,
-            StatType.wisdom.rawValue: 10,
-            StatType.charisma.rawValue: 10,
-            StatType.hpMax.rawValue: 8,
-            StatType.mpMax.rawValue: 8,
+            StatType.strength.rawValue: 0,
+            StatType.condition.rawValue: 0,
+            StatType.dexterity.rawValue: 0,
+            StatType.intelligence.rawValue: 0,
+            StatType.wisdom.rawValue: 0,
+            StatType.charisma.rawValue: 0,
+            StatType.hpMax.rawValue: 0,
+            StatType.mpMax.rawValue: 0,
         ])
-
-        let race = data.races.first?.name ?? "Half Orc"
-        let cls = data.classes.first?.name ?? "Ur-Paladin"
-        return PlayerState(name: "New Hero", race: race, characterClass: cls, stats: stats)
+        return PlayerState(name: "-", race: "-", characterClass: "-", stats: stats)
     }
 
     private static func ensureDefaultData(at destination: URL) throws {
@@ -1662,6 +1806,37 @@ final class AppState: ObservableObject {
                 "checked_paths": candidates.compactMap { $0?.path },
             ]
         )
+    }
+
+    private static func repairUserDataIfInvalid(at dataURL: URL) throws {
+        do {
+            _ = try PQDataLoader.load(from: dataURL)
+            return
+        } catch {
+            let fm = FileManager.default
+            let timestamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+            let backupURL = dataURL.deletingLastPathComponent().appendingPathComponent("default-data.invalid-\(timestamp).json")
+            if fm.fileExists(atPath: dataURL.path) {
+                try? fm.removeItem(at: backupURL)
+                try fm.moveItem(at: dataURL, to: backupURL)
+            }
+
+            let candidates: [URL?] = [
+                findBundledResource(named: "default-data", withExtension: "json", subdirectory: "data"),
+                findBundledResource(named: "default-data", withExtension: "json"),
+            ]
+            if let source = candidates.compactMap({ $0 }).first(where: { fm.fileExists(atPath: $0.path) }) {
+                try fm.copyItem(at: source, to: dataURL)
+                _ = try PQDataLoader.load(from: dataURL)
+                return
+            }
+
+            throw NSError(
+                domain: "pq-menubar",
+                code: 42,
+                userInfo: [NSLocalizedDescriptionKey: "default-data.json invalid and no bundled fallback found (\(error.localizedDescription))"]
+            )
+        }
     }
 
     private static func findBundledResource(named name: String, withExtension ext: String, subdirectory: String? = nil) -> URL? {

@@ -2026,7 +2026,7 @@
     {
       "name": "Invisible Stalker",
       "level": 8,
-      "item": footprint
+      "item": "footprint"
     },
     {
       "name": "Iron Peasant",

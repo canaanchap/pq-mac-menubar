@@ -40,10 +40,12 @@ struct PQMenuBarApp: App {
                 } else {
                     Image(systemName: "shield")
                 }
-                Text(labelText)
-                if appState.sessionStarted && appState.state.isPaused {
-                    Image(systemName: "pause.fill")
-                        .font(.system(size: 9, weight: .bold))
+                if !appState.compactMode {
+                    Text(labelText)
+                    if appState.sessionStarted && appState.state.isPaused {
+                        Image(systemName: "pause.fill")
+                            .font(.system(size: 9, weight: .bold))
+                    }
                 }
             }
         }
@@ -115,20 +117,12 @@ private final class MenubarShieldIconCatalog {
     }
 
     private func assetRoots() -> [URL] {
-        let fm = FileManager.default
-        let cwd = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
-        var roots: [URL] = [
-            cwd.appendingPathComponent("assets/exports", isDirectory: true),
-            cwd.appendingPathComponent("../assets/exports", isDirectory: true),
-            cwd.appendingPathComponent("../../assets/exports", isDirectory: true),
-        ]
-
+        var roots: [URL] = []
         if let resources = Bundle.main.resourceURL {
             roots.append(resources.appendingPathComponent("assets/exports", isDirectory: true))
             roots.append(resources.appendingPathComponent("Resources/assets/exports", isDirectory: true))
         }
         roots.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/assets/exports", isDirectory: true))
-
         return roots
     }
 }

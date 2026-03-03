@@ -388,9 +388,8 @@ struct DashboardView: View {
                         Toggle("Show Level Instead of Selected Progress?", isOn: $appState.showLevelLabelInMenubar)
                             .toggleStyle(.switch)
                             .disabled(appState.currentMenubarTrackMode == .level)
-                        Toggle("🚧 Compact menubar mode (Coming soon)", isOn: .constant(false))
+                        Toggle("Compact menubar mode (shield only)", isOn: $appState.compactMode)
                             .toggleStyle(.switch)
-                            .disabled(true)
                         Toggle("Persistent progress window (minimize + frame restore)", isOn: $appState.persistentDashboardWindow)
                             .toggleStyle(.switch)
                         Toggle(
@@ -496,6 +495,22 @@ struct DashboardView: View {
 
                 GroupBox("Data + Paths") {
                     VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            Toggle("Enable mods?", isOn: $appState.modsFeatureEnabled)
+                                .toggleStyle(.switch)
+                            Toggle("Mods active", isOn: $appState.modsActive)
+                                .toggleStyle(.switch)
+                                .disabled(!(appState.modsFeatureEnabled && appState.modsValidationPassed))
+                            Button("Dry Run Validation") {
+                                appState.runModDryRunAndEnableIfValid()
+                            }
+                            .disabled(!appState.modsFeatureEnabled)
+                        }
+                        Text(appState.modDryRunReport)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+
                         HStack {
                             Button("Reload Data (+Mods)") {
                                 appState.reloadDataAndMods()
