@@ -454,6 +454,9 @@ final class AppState: ObservableObject {
         selectedCharacterID = c.id
         recentEventsByCharacterID[c.id] = []
         persistRoster()
+        if hasOpenAIAPIKey {
+            generatePortrait(for: c, forceForCurrentLevel: true, announceStart: true)
+        }
         if startImmediately {
             start(character: c)
         } else {
@@ -1530,9 +1533,9 @@ final class AppState: ObservableObject {
             .replacingOccurrences(of: "{{best_equipment}}", with: character.bestEquipment)
             .replacingOccurrences(of: "{{best_prime_stat}}", with: character.stats.bestPrime.rawValue)
         if usingBaseImage {
-            return base + " Using the picture as a base, create me a pixel art feature image of my character using all of the details I provided. No border, no name or letters, just the character."
+            return base + " Using the picture as a base, create me an image with those parameters in the a pixel art style: mainly pixel art, on a background that contrasts, fantasy and lighthearted nature, game pixel art. The character portrait should feature image of the character using all of the details provided-with no letters, borders, labels, or other words. No border, no name or letters, just the character. Preserve the character's likeness (race/class) but with new details, mainly the \(character.bestEquipment) being worn and \(character.task?.description ?? "?") and \(character.questBook.currentQuest ?? "?") details (you can have a VERY SIMPLE background which contrasts with the character)."
         }
-        return base + " Create me a pixel art feature image of my character using all of the details I provided. No border, no name or letters, just the character."
+        return base + " Create me an image with those parameters in the a pixel art style: mainly pixel art, on a background that contrasts, fantasy and lighthearted nature, game pixel art. The character portrait should feature image of the character using all of the details provided. No border, no name or letters, just the character."
     }
 
     private func generatePortrait(for character: PlayerState, forceForCurrentLevel: Bool, announceStart: Bool) {

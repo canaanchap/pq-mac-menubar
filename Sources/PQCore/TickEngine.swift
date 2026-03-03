@@ -26,7 +26,7 @@ public struct TickEngine {
             events.append(.init(message: "Loading..."))
             state.activeCharacter.queue += [
                 .init(kind: .regular, description: "Experiencing an enigmatic and foreboding night vision", duration: 10000),
-                .init(kind: .regular, description: "Much is revealed about that wise old bastard you'd underestimated", duration: 6000),
+                .init(kind: .regular, description: "Much is revealed about that wise old knucklehead you'd underestimated", duration: 6000),
                 .init(kind: .regular, description: "A shocking series of events leaves you alone and bewildered, but resolute", duration: 6000),
                 .init(kind: .regular, description: "Drawing upon an unrealized reserve of determination, you set out on a long and dangerous journey", duration: 4000),
                 .init(kind: .plot, description: "Loading \(PQLingo.actName(1))", duration: 2000),
