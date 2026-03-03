@@ -186,9 +186,8 @@ final class AppState: ObservableObject {
                 modsEnabled: modsFeatureEnabledLoaded,
                 modsActive: modsFeatureEnabledLoaded && modsActiveLoaded
             )
-            let initialModsValidationPassed = initialWarnings.isEmpty
-            modsValidationPassed = initialModsValidationPassed
-            modDryRunReport = Self.buildDryRunReport(modFiles: initialModFiles, warnings: initialWarnings, accepted: initialModsValidationPassed)
+            modsValidationPassed = false
+            modDryRunReport = "No mod validation run yet."
             portraitPromptTemplateURL = dataDirectory.data.appendingPathComponent("portrait-prompt.txt")
             try Self.ensurePortraitPromptTemplate(at: portraitPromptTemplateURL)
 
@@ -209,9 +208,6 @@ final class AppState: ObservableObject {
             runtime = GameRuntime(initialState: initialState, data: initialDataBundle, saveStore: saveStore, logStore: logStore)
             runtime.setTickRateMultiplier(tickRateMultiplier)
             startLogArchiveTimer()
-            if modsFeatureEnabledLoaded {
-                runModDryRunAndEnableIfValid()
-            }
 
             runtime.onStateChange = { [weak self] newState in
                 DispatchQueue.main.async {
@@ -239,9 +235,9 @@ final class AppState: ObservableObject {
             runtime.onEvent = { [weak self] event in
                 DispatchQueue.main.async {
                     guard let self else { return }
+                    guard self.sessionStarted else { return }
                     self.events.insert(event, at: 0)
                     self.events = Array(self.events.prefix(100))
-                    guard self.sessionStarted else { return }
                     let id = self.state.activeCharacter.id
                     var history = self.recentEventsByCharacterID[id] ?? []
                     history.insert(event, at: 0)
@@ -1882,7 +1878,7 @@ final class AppState: ObservableObject {
     }
 
     private static let defaultPortraitPromptTemplate = """
-this is my character for a simple idle RPG. my name is {{character_name}}, a level {{player_level}} class {{player_class}}, who is also is playing a player race of {{player_race}}, I am currently on the {{current_quest}} quest doing the {{current_task}}. My best piece of equipment is {{best_equipment}}, and my best stat is {{best_prime_stat}}. using this as the base, make me an updated portrait featuring the {{current_quest}} and {{current_task}} i'm on. feature my best piece of equipment: {{best_equipment}}. preserve the race and class and my likeness, but give me a new portrait emphasizing my details. style: pixel art, bright background, fantasy and lighthearted nature, expert pixel art.
+this is my character for a simple idle RPG. my name is {{character_name}}, a level {{player_level}} class {{player_class}}, who is also is playing a player race of {{player_race}}, I am currently on the {{current_quest}} quest doing the {{current_task}}. My best piece of equipment is {{best_equipment}}, and my best stat is {{best_prime_stat}}. using this as the base, make me an updated portrait featuring the {{current_quest}} and {{current_task}} i'm on. feature my best piece of equipment: {{best_equipment}}. preserve the race and class and my likeness, but give me a new portrait emphasizing my details. style: pixel art, bright background, fantasy and lighthearted nature, expert pixel art. Forbidden things: there should NO text, no letters, no names or other labels.
 """
 
     private static func ensurePortraitPromptTemplate(at destination: URL) throws {
