@@ -118,12 +118,14 @@ private final class MenubarShieldIconCatalog {
 
     private func assetRoots() -> [URL] {
         var roots: [URL] = []
+        roots.append(Bundle.module.resourceURL?.appendingPathComponent("assets/exports", isDirectory: true) ?? URL(fileURLWithPath: "/nonexistent"))
+        roots.append(Bundle.module.bundleURL.appendingPathComponent("Contents/Resources/assets/exports", isDirectory: true))
         if let resources = Bundle.main.resourceURL {
             roots.append(resources.appendingPathComponent("assets/exports", isDirectory: true))
             roots.append(resources.appendingPathComponent("Resources/assets/exports", isDirectory: true))
         }
         roots.append(Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/assets/exports", isDirectory: true))
-        return roots
+        return Array(Set(roots.map { $0.standardizedFileURL })).filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 }
 

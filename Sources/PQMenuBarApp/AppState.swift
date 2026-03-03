@@ -1882,7 +1882,7 @@ final class AppState: ObservableObject {
     }
 
     private static let defaultPortraitPromptTemplate = """
-this is my character for a simple idle RPG. my name is {{character_name}}, a level {{player_level}} class {{player_class}}, who is also is playing a player race of {{player_race}}, I am currently on the {{current_quest}} quest doing the {{current_task}}. My best piece of equipment is {{best_equipment}}, and my best stat is {{best_prime_stat}}.
+this is my character for a simple idle RPG. my name is {{character_name}}, a level {{player_level}} class {{player_class}}, who is also is playing a player race of {{player_race}}, I am currently on the {{current_quest}} quest doing the {{current_task}}. My best piece of equipment is {{best_equipment}}, and my best stat is {{best_prime_stat}}. using this as the base, make me an updated portrait featuring the {{current_quest}} and {{current_task}} i'm on. feature my best piece of equipment: {{best_equipment}}. preserve the race and class and my likeness, but give me a new portrait emphasizing my details. style: pixel art, bright background, fantasy and lighthearted nature, expert pixel art.
 """
 
     private static func ensurePortraitPromptTemplate(at destination: URL) throws {

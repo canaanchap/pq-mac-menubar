@@ -197,17 +197,30 @@ struct DashboardView: View {
 
                 panel("Plot Development") {
                     VStack(alignment: .leading, spacing: 2) {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 1) {
-                                if p.questBook.act <= 0 {
-                                    Text("[ ] Prologue")
-                                } else {
-                                    if p.questBook.act > 1 {
-                                        ForEach(Array((1..<(p.questBook.act)).enumerated()), id: \.offset) { _, act in
-                                            Text("[x] \(PQLingo.actName(act))")
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    if p.questBook.act <= 0 {
+                                        Text("[ ] Prologue")
+                                    } else {
+                                        if p.questBook.act > 1 {
+                                            ForEach(Array((1..<(p.questBook.act)).enumerated()), id: \.offset) { _, act in
+                                                Text("[x] \(PQLingo.actName(act))")
+                                            }
                                         }
+                                        Text("[ ] \(PQLingo.actName(p.questBook.act))")
                                     }
-                                    Text("[ ] \(PQLingo.actName(p.questBook.act))")
+                                    Color.clear.frame(height: 1).id("plot-bottom")
+                                }
+                            }
+                            .onAppear {
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("plot-bottom", anchor: .bottom)
+                                }
+                            }
+                            .onChange(of: p.questBook.act) { _, _ in
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("plot-bottom", anchor: .bottom)
                                 }
                             }
                         }
@@ -247,14 +260,27 @@ struct DashboardView: View {
                             Spacer()
                             Text("\(p.inventoryGold)")
                         }
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 1) {
-                                ForEach(Array(p.inventoryItems.prefix(40).enumerated()), id: \.offset) { _, item in
-                                    HStack {
-                                        Text(item.name)
-                                        Spacer()
-                                        Text("\(item.quantity)")
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    ForEach(Array(p.inventoryItems.prefix(40).enumerated()), id: \.offset) { _, item in
+                                        HStack {
+                                            Text(item.name)
+                                            Spacer()
+                                            Text("\(item.quantity)")
+                                        }
                                     }
+                                    Color.clear.frame(height: 1).id("inventory-bottom")
+                                }
+                            }
+                            .onAppear {
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("inventory-bottom", anchor: .bottom)
+                                }
+                            }
+                            .onChange(of: p.inventoryItems.count) { _, _ in
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("inventory-bottom", anchor: .bottom)
                                 }
                             }
                         }
@@ -268,16 +294,29 @@ struct DashboardView: View {
 
                 panel("Quests") {
                     VStack(alignment: .leading, spacing: 2) {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 1) {
-                                let recent = Array(p.questBook.quests.suffix(25))
-                                if recent.count > 1 {
-                                    ForEach(Array(recent.dropLast().enumerated()), id: \.offset) { _, quest in
-                                        Text("[x] \(quest)")
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 1) {
+                                    let recent = Array(p.questBook.quests.suffix(25))
+                                    if recent.count > 1 {
+                                        ForEach(Array(recent.dropLast().enumerated()), id: \.offset) { _, quest in
+                                            Text("[x] \(quest)")
+                                        }
                                     }
+                                    if let current = recent.last {
+                                        Text("[ ] \(current)")
+                                    }
+                                    Color.clear.frame(height: 1).id("quests-bottom")
                                 }
-                                if let current = recent.last {
-                                    Text("[ ] \(current)")
+                            }
+                            .onAppear {
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("quests-bottom", anchor: .bottom)
+                                }
+                            }
+                            .onChange(of: p.questBook.quests.count) { _, _ in
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("quests-bottom", anchor: .bottom)
                                 }
                             }
                         }
@@ -495,16 +534,34 @@ struct DashboardView: View {
 
                 GroupBox("Data + Paths") {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 12) {
-                            Toggle("Enable mods?", isOn: $appState.modsFeatureEnabled)
-                                .toggleStyle(.switch)
-                            Toggle("Mods active", isOn: $appState.modsActive)
-                                .toggleStyle(.switch)
-                                .disabled(!(appState.modsFeatureEnabled && appState.modsValidationPassed))
-                            Button("Dry Run Validation") {
-                                appState.runModDryRunAndEnableIfValid()
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 10) {
+                                Text("1) Enable mods?")
+                                    .frame(width: 170, alignment: .leading)
+                                Toggle("", isOn: $appState.modsFeatureEnabled)
+                                    .labelsHidden()
+                                    .toggleStyle(.switch)
                             }
-                            .disabled(!appState.modsFeatureEnabled)
+                            HStack(spacing: 10) {
+                                Text("2) Dry run validation?")
+                                    .frame(width: 170, alignment: .leading)
+                                Text(appState.modsFeatureEnabled ? (appState.modsValidationPassed ? "Pass" : "Fail") : "-")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(appState.modsFeatureEnabled ? (appState.modsValidationPassed ? .green : .red) : .secondary)
+                                if appState.modsFeatureEnabled {
+                                    Button("Re-run") {
+                                        appState.runModDryRunAndEnableIfValid()
+                                    }
+                                }
+                            }
+                            HStack(spacing: 10) {
+                                Text("3) Mods active?")
+                                    .frame(width: 170, alignment: .leading)
+                                Toggle("", isOn: $appState.modsActive)
+                                    .labelsHidden()
+                                    .toggleStyle(.switch)
+                                    .disabled(!(appState.modsFeatureEnabled && appState.modsValidationPassed))
+                            }
                         }
                         Text(appState.modDryRunReport)
                             .font(.caption)
