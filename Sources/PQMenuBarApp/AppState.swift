@@ -94,6 +94,7 @@ final class AppState: ObservableObject {
     }
     @Published var modsFeatureEnabled: Bool {
         didSet {
+            guard hasCompletedInitialization else { return }
             UserDefaults.standard.set(modsFeatureEnabled, forKey: Self.modsFeatureEnabledDefaultsKey)
             if modsFeatureEnabled {
                 runModDryRunAndEnableIfValid()
@@ -107,6 +108,7 @@ final class AppState: ObservableObject {
     }
     @Published var modsActive: Bool {
         didSet {
+            guard hasCompletedInitialization else { return }
             UserDefaults.standard.set(modsActive, forKey: Self.modsActiveDefaultsKey)
             if modsFeatureEnabled {
                 reloadDataAndMods()
@@ -140,6 +142,7 @@ final class AppState: ObservableObject {
     private var lastRosterPersistAt: Date = .distantPast
     private var menubarTrackByCharacterID: [UUID: MenubarIconTrackMode] = [:]
     private var recentEventsByCharacterID: [UUID: [GameEvent]] = [:]
+    private var hasCompletedInitialization: Bool = false
 
     init() {
         do {
@@ -165,10 +168,12 @@ final class AppState: ObservableObject {
             } else {
                 showLevelLabelInMenubar = UserDefaults.standard.bool(forKey: Self.showLevelLabelInMenubarDefaultsKey)
             }
-            let modsFeatureEnabledLoaded = UserDefaults.standard.bool(forKey: Self.modsFeatureEnabledDefaultsKey)
-            let modsActiveLoaded = UserDefaults.standard.bool(forKey: Self.modsActiveDefaultsKey)
+            let modsFeatureEnabledLoaded = false
+            let modsActiveLoaded = false
             modsFeatureEnabled = modsFeatureEnabledLoaded
             modsActive = modsActiveLoaded
+            UserDefaults.standard.set(false, forKey: Self.modsFeatureEnabledDefaultsKey)
+            UserDefaults.standard.set(false, forKey: Self.modsActiveDefaultsKey)
 
             let userDataURL = dataDirectory.data.appendingPathComponent("default-data.json")
             try Self.ensureDefaultData(at: userDataURL)
@@ -272,6 +277,7 @@ final class AppState: ObservableObject {
                     }
                 }
             }
+            hasCompletedInitialization = true
         } catch {
             fatalError("Failed to initialize AppState: \(error)")
         }

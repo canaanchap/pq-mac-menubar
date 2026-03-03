@@ -545,14 +545,14 @@ struct DashboardView: View {
                             HStack(spacing: 10) {
                                 Text("2) Dry run validation?")
                                     .frame(width: 170, alignment: .leading)
-                                Text(appState.modsFeatureEnabled ? (appState.modsValidationPassed ? "Pass" : "Fail") : "-")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(appState.modsFeatureEnabled ? (appState.modsValidationPassed ? .green : .red) : .secondary)
                                 if appState.modsFeatureEnabled {
                                     Button("Re-run") {
                                         appState.runModDryRunAndEnableIfValid()
                                     }
                                 }
+                                Text(appState.modsFeatureEnabled ? (appState.modsValidationPassed ? "Pass" : "Fail") : "-")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(appState.modsFeatureEnabled ? (appState.modsValidationPassed ? .green : .red) : .secondary)
                             }
                             HStack(spacing: 10) {
                                 Text("3) Mods active?")
