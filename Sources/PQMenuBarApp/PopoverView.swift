@@ -17,6 +17,7 @@ struct PopoverView: View {
     @State private var suggestedCharacterName: String = ""
     @State private var newCharacterRace: String = ""
     @State private var newCharacterClass: String = ""
+    @State private var newCharacterOnlineMode: Bool = false
     @State private var rolledStats: Stats?
     @State private var previousRolledStats: Stats?
 
@@ -112,6 +113,8 @@ struct PopoverView: View {
                 .font(.title3.weight(.bold))
 
             TextField(suggestedCharacterName.isEmpty ? "Name" : suggestedCharacterName, text: $newCharacterName)
+            Toggle("Online Multiplayer (immutable)", isOn: $newCharacterOnlineMode)
+                .toggleStyle(.switch)
 
             Picker("Race", selection: $newCharacterRace) {
                 ForEach(Array(appState.dataBundle.races.map(\.name).enumerated()), id: \.offset) { _, race in
@@ -160,7 +163,8 @@ struct PopoverView: View {
                         name: finalName,
                         race: newCharacterRace,
                         className: newCharacterClass,
-                        stats: rolledStats
+                        stats: rolledStats,
+                        networkMode: newCharacterOnlineMode ? "online" : "offline"
                     )
                     creatingCharacter = false
                     previousRolledStats = nil
@@ -182,7 +186,8 @@ struct PopoverView: View {
                         name: randomName,
                         race: randomRace,
                         className: randomClass,
-                        stats: randomStats
+                        stats: randomStats,
+                        networkMode: newCharacterOnlineMode ? "online" : "offline"
                     )
                     creatingCharacter = false
                 }
@@ -274,6 +279,7 @@ struct PopoverView: View {
         newCharacterName = ""
         rolledStats = appState.rollStats()
         previousRolledStats = nil
+        newCharacterOnlineMode = false
         creatingCharacter = true
     }
 

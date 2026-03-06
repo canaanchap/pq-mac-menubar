@@ -51,8 +51,21 @@ struct DashboardView: View {
     @State private var newCharacterClassDraft: String = ""
     @State private var newCharacterStatsDraft: Stats?
     @State private var previousCharacterStatsDraft: Stats?
+    @State private var newCharacterOnlineModeDraft: Bool = false
+    @State private var multiplayerEmailDraft: String = ""
+    @State private var multiplayerPasswordDraft: String = ""
+    @State private var multiplayerPublicNameDraft: String = ""
+    @State private var multiplayerWantsNewsDraft: Bool = true
+    @State private var multiplayerVerifyCodeDraft: String = ""
+    @State private var multiplayerSignInEmailDraft: String = ""
+    @State private var multiplayerSignInPasswordDraft: String = ""
 
     private let tickRateOptions: [Double] = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
+    private var canShowMultiplayerTab: Bool {
+        let candidate: PlayerState? = appState.sessionStarted ? appState.state.activeCharacter : appState.selectedCharacter
+        guard let candidate else { return false }
+        return candidate.isOnlineMultiplayer
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -60,9 +73,11 @@ struct DashboardView: View {
                 .tabItem { Text("Overview") }
                 .tag(Tab.overview)
 
-            multiplayer
-                .tabItem { Text("Multiplayer") }
-                .tag(Tab.multiplayer)
+            if canShowMultiplayerTab {
+                multiplayer
+                    .tabItem { Text("Multiplayer") }
+                    .tag(Tab.multiplayer)
+            }
 
             characterAndLog
                 .tabItem { Text("Character + Log") }
@@ -89,6 +104,11 @@ struct DashboardView: View {
                 triggerOverviewReentryMaskIfNeeded()
             } else {
                 stopReentryMask()
+            }
+        }
+        .onChange(of: canShowMultiplayerTab) { _, show in
+            if !show && selectedTab == .multiplayer {
+                selectedTab = .overview
             }
         }
         .onChange(of: appState.betaReentryLoadMaskEnabled) { _, enabled in
@@ -412,122 +432,107 @@ struct DashboardView: View {
         let active = appState.state.activeCharacter
         let selected = appState.selectedCharacter
         let target = appState.sessionStarted ? active : selected
-        let mode = target?.networkMode ?? "offline"
-        let locked = target?.networkLocked ?? false
+        let hasSession = appState.multiplayerSession.map { !$0.isExpired } ?? false
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                GroupBox("Account") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let account = appState.multiplayerAccount {
-                            HStack {
-                                Text("Email:")
-                                Text(account.email).foregroundStyle(.secondary)
-                            }
-                            HStack {
-                                Text("Public Name:")
-                                Text(account.publicName).foregroundStyle(.secondary)
-                            }
-                            HStack {
-                                Text("Verified:")
-                                Text(account.verified ? "Yes" : "No")
-                                    .foregroundStyle(account.verified ? .green : .red)
-                            }
-                        } else {
-                            Text("No account linked yet.")
+                if !hasSession {
+                    GroupBox("Multiplayer") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("You are not signed in to a multiplayer account.")
                                 .foregroundStyle(.secondary)
+                            Button("Open Settings: Multiplayer Account") {
+                                selectedTab = .settings
+                            }
                         }
                     }
-                }
-
-                GroupBox("Session") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let session = appState.multiplayerSession {
-                            Text("Session: \(session.isExpired ? "Expired" : "Active")")
-                                .foregroundStyle(session.isExpired ? .red : .green)
-                            Text("Expires: \(session.expiresAt.formatted(.dateTime.year().month().day().hour().minute()))")
-                                .foregroundStyle(.secondary)
-                            HStack {
-                                Button("Sign Out (Local)") {
-                                    appState.multiplayerSignOutLocalSession()
+                } else {
+                    GroupBox("Session") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let session = appState.multiplayerSession {
+                                Text("Session: \(session.isExpired ? "Expired" : "Active")")
+                                    .foregroundStyle(session.isExpired ? .red : .green)
+                                Text("Expires: \(session.expiresAt.formatted(.dateTime.year().month().day().hour().minute()))")
+                                    .foregroundStyle(.secondary)
+                                HStack {
+                                    Button("Sign Out (Local)") {
+                                        appState.multiplayerSignOutLocalSession()
+                                    }
                                 }
                             }
-                        } else {
-                            Text("No active local session.")
-                                .foregroundStyle(.secondary)
                         }
                     }
-                }
 
-                GroupBox("Character Multiplayer Mode") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let target {
-                            HStack {
-                                Text("Character:")
-                                Text(target.name).foregroundStyle(.secondary)
+                    GroupBox("Character Multiplayer Mode") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let target {
+                                HStack {
+                                    Text("Character:")
+                                    Text(target.name).foregroundStyle(.secondary)
+                                }
+                                HStack {
+                                    Text("Mode:")
+                                    Text((target.networkMode ?? "offline").capitalized).foregroundStyle(.secondary)
+                                }
+                                HStack {
+                                    Text("Locked:")
+                                    Text((target.networkLocked ?? false) ? "Yes" : "No").foregroundStyle(.secondary)
+                                }
+                                HStack {
+                                    Text("Realm ID:")
+                                    Text(target.realmId ?? "-").foregroundStyle(.secondary)
+                                }
+                                HStack {
+                                    Text("Server Character ID:")
+                                    Text(target.serverCharacterId ?? "-").foregroundStyle(.secondary)
+                                }
+                            } else {
+                                Text("No character selected.")
+                                    .foregroundStyle(.secondary)
                             }
-                            HStack {
-                                Text("Mode:")
-                                Text(mode.capitalized).foregroundStyle(.secondary)
-                            }
-                            HStack {
-                                Text("Locked:")
-                                Text(locked ? "Yes" : "No").foregroundStyle(.secondary)
-                            }
-                            HStack {
-                                Text("Realm ID:")
-                                Text(target.realmId ?? "-").foregroundStyle(.secondary)
-                            }
-                            HStack {
-                                Text("Server Character ID:")
-                                Text(target.serverCharacterId ?? "-").foregroundStyle(.secondary)
-                            }
-                        } else {
-                            Text("No character selected.")
-                                .foregroundStyle(.secondary)
                         }
                     }
-                }
 
-                GroupBox("Realm + Guild Cache") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let realms = appState.multiplayerRealmCache?.realms, !realms.isEmpty {
-                            Text("Realms cached: \(realms.count)")
-                                .foregroundStyle(.secondary)
-                            ForEach(Array(realms.enumerated()), id: \.offset) { _, realm in
-                                Text("\(realm.name) [\(realm.realmId)]")
+                    GroupBox("Realm + Guild Cache") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let realms = appState.multiplayerRealmCache?.realms, !realms.isEmpty {
+                                Text("Realms cached: \(realms.count)")
+                                    .foregroundStyle(.secondary)
+                                ForEach(Array(realms.enumerated()), id: \.offset) { _, realm in
+                                    Text("\(realm.name) [\(realm.realmId)]")
+                                }
+                            } else {
+                                Text("No realm cache yet.")
+                                    .foregroundStyle(.secondary)
                             }
-                        } else {
-                            Text("No realm cache yet.")
-                                .foregroundStyle(.secondary)
-                        }
 
-                        Divider()
+                            Divider()
 
-                        if let guild = appState.multiplayerGuildCache {
-                            Text("Guild: \(guild.formalName) (\(guild.shortTag))")
-                            Text("Members: \(guild.memberCount)")
-                                .foregroundStyle(.secondary)
-                            Text("Alignment: \(guild.alignmentCode) • Type: \(guild.typeCode)")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("No guild cache yet.")
-                                .foregroundStyle(.secondary)
+                            if let guild = appState.multiplayerGuildCache {
+                                Text("Guild: \(guild.formalName) (\(guild.shortTag))")
+                                Text("Members: \(guild.memberCount)")
+                                    .foregroundStyle(.secondary)
+                                Text("Alignment: \(guild.alignmentCode) • Type: \(guild.typeCode)")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("No guild cache yet.")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                }
 
-                GroupBox("Connector") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("API: https://api.progressquest.me")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Admin: https://admin.progressquest.me")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Scaffold state: local models + tab shell only (no live API calls yet).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    GroupBox("Connector") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("API: https://api.progressquest.me")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("Admin: https://admin.progressquest.me")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("Scaffold state: local models + tab shell only (no live API calls yet).")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -591,6 +596,66 @@ struct DashboardView: View {
                             Button("Quit App") {
                                 appState.quitApp()
                             }
+                        }
+                    }
+                }
+
+                GroupBox("Multiplayer Account") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("API Base URL")
+                                .frame(width: 120, alignment: .leading)
+                            TextField("https://api.progressquest.me", text: $appState.multiplayerAPIBaseURL)
+                        }
+                        if let account = appState.multiplayerAccount {
+                            Text("Account: \(account.email) • \(account.publicName)")
+                                .foregroundStyle(.secondary)
+                            Text("Verified: \(account.verified ? "Yes" : "No")")
+                                .foregroundStyle(account.verified ? .green : .red)
+                        } else {
+                            Text("No multiplayer account configured.")
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack {
+                            TextField("Email", text: $multiplayerEmailDraft)
+                            SecureField("Password", text: $multiplayerPasswordDraft)
+                            TextField("Public Name", text: $multiplayerPublicNameDraft)
+                            Toggle("News", isOn: $multiplayerWantsNewsDraft)
+                                .toggleStyle(.switch)
+                        }
+                        HStack {
+                            Button("Create Account") {
+                                appState.multiplayerRegisterAccount(
+                                    email: multiplayerEmailDraft,
+                                    password: multiplayerPasswordDraft,
+                                    publicName: multiplayerPublicNameDraft,
+                                    wantsNews: multiplayerWantsNewsDraft
+                                )
+                            }
+                        }
+
+                        HStack {
+                            TextField("Verify Email", text: $multiplayerEmailDraft)
+                            TextField("Code", text: $multiplayerVerifyCodeDraft)
+                            Button("Verify Account") {
+                                appState.multiplayerVerifyAccount(email: multiplayerEmailDraft, code: multiplayerVerifyCodeDraft)
+                            }
+                        }
+
+                        HStack {
+                            TextField("Sign-in Email", text: $multiplayerSignInEmailDraft)
+                            SecureField("Sign-in Password", text: $multiplayerSignInPasswordDraft)
+                            Button("Sign In") {
+                                appState.multiplayerSignIn(email: multiplayerSignInEmailDraft, password: multiplayerSignInPasswordDraft)
+                            }
+                            Button("Validate Session") {
+                                appState.multiplayerRefreshSession()
+                            }
+                            Button("Sign Out") {
+                                appState.multiplayerSignOutLocalSession()
+                            }
+                            .disabled(appState.multiplayerSession == nil)
                         }
                     }
                 }
@@ -1049,7 +1114,7 @@ struct DashboardView: View {
         case "settings":
             selectedTab = .settings
         case "multiplayer":
-            selectedTab = .multiplayer
+            selectedTab = canShowMultiplayerTab ? .multiplayer : .settings
         default:
             selectedTab = .overview
         }
@@ -1178,6 +1243,8 @@ struct DashboardView: View {
             }
 
             TextField(newCharacterNameSuggestion.isEmpty ? "Name" : newCharacterNameSuggestion, text: $newCharacterNameDraft)
+            Toggle("Online Multiplayer (immutable)", isOn: $newCharacterOnlineModeDraft)
+                .toggleStyle(.switch)
 
             Picker("Race", selection: $newCharacterRaceDraft) {
                 ForEach(Array(appState.dataBundle.races.map(\.name).enumerated()), id: \.offset) { _, race in
@@ -1254,6 +1321,7 @@ struct DashboardView: View {
         newCharacterClassDraft = appState.dataBundle.classes.first?.name ?? "Ur-Paladin"
         newCharacterStatsDraft = appState.rollStats()
         previousCharacterStatsDraft = nil
+        newCharacterOnlineModeDraft = false
         showCreateCharacterDialog = true
     }
 
@@ -1288,7 +1356,8 @@ struct DashboardView: View {
             race: race,
             className: className,
             stats: stats,
-            startImmediately: startImmediately
+            startImmediately: startImmediately,
+            networkMode: newCharacterOnlineModeDraft ? "online" : "offline"
         )
         newCharacterNameSuggestion = ""
         showCreateCharacterDialog = false

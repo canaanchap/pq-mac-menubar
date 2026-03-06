@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/Handlers/AccountHandler.php';
+
 function route_request(string $method, string $uri): array {
     $path = parse_url($uri, PHP_URL_PATH) ?? '/';
 
@@ -29,10 +31,23 @@ function route_request(string $method, string $uri): array {
         ];
     }
 
+    if ($path === '/api/v1/account/register' && $method === 'POST') {
+        return AccountHandler::register(parse_json_body());
+    }
+
+    if ($path === '/api/v1/account/verify' && $method === 'POST') {
+        return AccountHandler::verify(parse_json_body());
+    }
+
+    if ($path === '/api/v1/account/login' && $method === 'POST') {
+        return AccountHandler::login(parse_json_body());
+    }
+
+    if ($path === '/api/v1/account/session' && $method === 'POST') {
+        return AccountHandler::session(parse_json_body());
+    }
+
     $stubRoutes = [
-        'POST /api/v1/account/register',
-        'POST /api/v1/account/verify',
-        'POST /api/v1/account/login',
         'POST /api/v1/characters/create-online',
         'POST /api/v1/guilds/create',
         'POST /api/v1/guilds/join',

@@ -121,6 +121,11 @@ final class AppState: ObservableObject {
     @Published var multiplayerSession: MultiplayerSession?
     @Published var multiplayerRealmCache: MultiplayerRealmCache?
     @Published var multiplayerGuildCache: MultiplayerGuildCache?
+    @Published var multiplayerAPIBaseURL: String {
+        didSet {
+            UserDefaults.standard.set(multiplayerAPIBaseURL, forKey: Self.multiplayerAPIBaseURLDefaultsKey)
+        }
+    }
 
     let dataDirectory: DataDirectory
     let saveStore: SaveStore
@@ -141,6 +146,7 @@ final class AppState: ObservableObject {
     private static let compactModeDefaultsKey = "pq.menubar.compactMode"
     private static let modsFeatureEnabledDefaultsKey = "pq.mods.featureEnabled"
     private static let modsActiveDefaultsKey = "pq.mods.active"
+    private static let multiplayerAPIBaseURLDefaultsKey = "pq.multiplayer.apiBaseURL"
     private var portraitGenerationInFlightCharacterIDs: Set<UUID> = []
     private var lastSeenLevelByCharacterID: [UUID: Int] = [:]
     private var logArchiveTimer: DispatchSourceTimer?
@@ -178,6 +184,7 @@ final class AppState: ObservableObject {
             let modsActiveLoaded = false
             modsFeatureEnabled = modsFeatureEnabledLoaded
             modsActive = modsActiveLoaded
+            multiplayerAPIBaseURL = UserDefaults.standard.string(forKey: Self.multiplayerAPIBaseURLDefaultsKey) ?? "https://api.progressquest.me"
             UserDefaults.standard.set(false, forKey: Self.modsFeatureEnabledDefaultsKey)
             UserDefaults.standard.set(false, forKey: Self.modsActiveDefaultsKey)
 
@@ -463,9 +470,18 @@ final class AppState: ObservableObject {
         refreshPortraitForCurrentCharacter()
     }
 
-    func createCharacter(name: String, race: String, className: String, stats: Stats? = nil, startImmediately: Bool = true) {
+    func createCharacter(
+        name: String,
+        race: String,
+        className: String,
+        stats: Stats? = nil,
+        startImmediately: Bool = true,
+        networkMode: String = "offline"
+    ) {
         let newStats = stats ?? rollStats()
-        let c = PlayerState(name: name, race: race, characterClass: className, stats: newStats)
+        var c = PlayerState(name: name, race: race, characterClass: className, stats: newStats)
+        c.networkMode = networkMode
+        c.networkLocked = true
         roster.append(c)
         selectedCharacterID = c.id
         recentEventsByCharacterID[c.id] = []
@@ -605,6 +621,243 @@ final class AppState: ObservableObject {
         multiplayerSession = nil
         try? multiplayerStore.saveSession(nil)
         flash("Multiplayer session cleared.")
+    }
+
+    func multiplayerCreateLocalAccount(email: String, publicName: String, wantsNews: Bool) {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanName = publicName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanEmail.isEmpty, !cleanName.isEmpty else {
+            flash("Email and public name are required.")
+            return
+        }
+        let account = MultiplayerAccountProfile(
+            accountId: "acc_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12))",
+            email: cleanEmail,
+            publicName: cleanName,
+            wantsNews: wantsNews,
+            verified: true,
+            updatedAt: Date()
+        )
+        multiplayerAccount = account
+        try? multiplayerStore.saveAccount(account)
+        flash("Local multiplayer account created.")
+    }
+
+    func multiplayerRegisterAccount(email: String, password: String, publicName: String, wantsNews: Bool) {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanName = publicName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPass = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanEmail.isEmpty, !cleanName.isEmpty, !cleanPass.isEmpty else {
+            flash("Email, password, and public name are required.")
+            return
+        }
+
+        Task {
+            do {
+                let payload: [String: Any] = [
+                    "email": cleanEmail,
+                    "password": cleanPass,
+                    "publicName": cleanName,
+                    "wantsNews": wantsNews,
+                ]
+                let json = try await self.multiplayerPOST(path: "/api/v1/account/register", payload: payload)
+                let data = try self.extractData(json)
+                let account = MultiplayerAccountProfile(
+                    accountId: self.stringFrom(data["accountId"]),
+                    email: self.stringFrom(data["email"]),
+                    publicName: self.stringFrom(data["publicName"]),
+                    wantsNews: (data["wantsNews"] as? Bool) ?? wantsNews,
+                    verified: (data["verified"] as? Bool) ?? false,
+                    updatedAt: Date()
+                )
+                self.multiplayerAccount = account
+                try? self.multiplayerStore.saveAccount(account)
+
+                if let code = data["verificationCodeForDebug"] as? String, !code.isEmpty {
+                    self.flash("Registered. Debug verification code: \(code)")
+                } else {
+                    self.flash("Registered. Verify your account next.")
+                }
+            } catch {
+                self.flash("Register failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func multiplayerVerifyAccount(email: String, code: String) {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanEmail.isEmpty, !cleanCode.isEmpty else {
+            flash("Email and verification code are required.")
+            return
+        }
+
+        Task {
+            do {
+                let payload: [String: Any] = [
+                    "email": cleanEmail,
+                    "code": cleanCode,
+                ]
+                let json = try await self.multiplayerPOST(path: "/api/v1/account/verify", payload: payload)
+                _ = try self.extractData(json)
+
+                if var existing = self.multiplayerAccount, existing.email == cleanEmail {
+                    existing.verified = true
+                    existing.updatedAt = Date()
+                    self.multiplayerAccount = existing
+                    try? self.multiplayerStore.saveAccount(existing)
+                }
+                self.flash("Account verified.")
+            } catch {
+                self.flash("Verify failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func multiplayerSignInLocal(email: String) {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let account = multiplayerAccount, account.email == cleanEmail else {
+            flash("No local account found for that email.")
+            return
+        }
+        let session = MultiplayerSession(
+            accountId: account.accountId,
+            sessionToken: "sess_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))",
+            expiresAt: Date().addingTimeInterval(60 * 60 * 24),
+            issuedAt: Date()
+        )
+        multiplayerSession = session
+        try? multiplayerStore.saveSession(session)
+        flash("Signed in locally.")
+    }
+
+    func multiplayerSignIn(email: String, password: String) {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanEmail.isEmpty, !cleanPassword.isEmpty else {
+            flash("Email and password are required.")
+            return
+        }
+
+        Task {
+            do {
+                let payload: [String: Any] = [
+                    "email": cleanEmail,
+                    "password": cleanPassword,
+                ]
+                let json = try await self.multiplayerPOST(path: "/api/v1/account/login", payload: payload)
+                let data = try self.extractData(json)
+
+                let accountRaw = data["account"] as? [String: Any] ?? [:]
+                let account = MultiplayerAccountProfile(
+                    accountId: self.stringFrom(accountRaw["accountId"]),
+                    email: self.stringFrom(accountRaw["email"]),
+                    publicName: self.stringFrom(accountRaw["publicName"]),
+                    wantsNews: (accountRaw["wantsNews"] as? Bool) ?? false,
+                    verified: (accountRaw["verified"] as? Bool) ?? false,
+                    updatedAt: Date()
+                )
+                self.multiplayerAccount = account
+                try? self.multiplayerStore.saveAccount(account)
+
+                let expiresAtString = self.stringFrom(data["expiresAt"])
+                let expiresAt = Self.parseISO8601Date(expiresAtString) ?? Date().addingTimeInterval(60 * 60 * 24)
+                let session = MultiplayerSession(
+                    accountId: account.accountId,
+                    sessionToken: self.stringFrom(data["sessionToken"]),
+                    expiresAt: expiresAt,
+                    issuedAt: Date()
+                )
+                self.multiplayerSession = session
+                try? self.multiplayerStore.saveSession(session)
+                self.flash("Signed in.")
+            } catch {
+                self.flash("Sign in failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func multiplayerRefreshSession() {
+        guard let session = multiplayerSession else {
+            flash("No multiplayer session.")
+            return
+        }
+        Task {
+            do {
+                let payload: [String: Any] = ["sessionToken": session.sessionToken]
+                let json = try await self.multiplayerPOST(path: "/api/v1/account/session", payload: payload)
+                let data = try self.extractData(json)
+                let accountRaw = data["account"] as? [String: Any] ?? [:]
+                let account = MultiplayerAccountProfile(
+                    accountId: self.stringFrom(accountRaw["accountId"]),
+                    email: self.stringFrom(accountRaw["email"]),
+                    publicName: self.stringFrom(accountRaw["publicName"]),
+                    wantsNews: (accountRaw["wantsNews"] as? Bool) ?? false,
+                    verified: (accountRaw["verified"] as? Bool) ?? false,
+                    updatedAt: Date()
+                )
+                self.multiplayerAccount = account
+                try? self.multiplayerStore.saveAccount(account)
+
+                let expiresAtString = self.stringFrom(data["expiresAt"])
+                let expiresAt = Self.parseISO8601Date(expiresAtString) ?? session.expiresAt
+                self.multiplayerSession = MultiplayerSession(
+                    accountId: account.accountId,
+                    sessionToken: session.sessionToken,
+                    expiresAt: expiresAt,
+                    issuedAt: session.issuedAt
+                )
+                try? self.multiplayerStore.saveSession(self.multiplayerSession)
+                self.flash("Session valid.")
+            } catch {
+                self.flash("Session check failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func multiplayerPOST(path: String, payload: [String: Any]) async throws -> [String: Any] {
+        let base = multiplayerAPIBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: base + path) else {
+            throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid multiplayer API URL"])
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response"])
+        }
+        let decoded = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let json = decoded as? [String: Any] else {
+            throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON response"])
+        }
+        if !(200...299).contains(http.statusCode) {
+            let message = (json["error"] as? [String: Any])?["message"] as? String ?? "HTTP \(http.statusCode)"
+            throw NSError(domain: "pq-menubar", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        return json
+    }
+
+    private func extractData(_ json: [String: Any]) throws -> [String: Any] {
+        let ok = (json["ok"] as? Bool) ?? false
+        guard ok else {
+            let message = (json["error"] as? [String: Any])?["message"] as? String ?? "Unknown API error"
+            throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        return json["data"] as? [String: Any] ?? [:]
+    }
+
+    private func stringFrom(_ value: Any?) -> String {
+        if let s = value as? String { return s }
+        if let n = value as? NSNumber { return n.stringValue }
+        return ""
+    }
+
+    private static func parseISO8601Date(_ value: String) -> Date? {
+        let fmt = ISO8601DateFormatter()
+        return fmt.date(from: value)
     }
 
     func refreshPortraitForCurrentCharacter() {
