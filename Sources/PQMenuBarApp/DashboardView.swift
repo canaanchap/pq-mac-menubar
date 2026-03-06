@@ -13,6 +13,7 @@ private enum VisualTestMode: String {
 struct DashboardView: View {
     private enum Tab: Hashable {
         case overview
+        case multiplayer
         case characterLog
         case settings
     }
@@ -58,6 +59,10 @@ struct DashboardView: View {
             overview
                 .tabItem { Text("Overview") }
                 .tag(Tab.overview)
+
+            multiplayer
+                .tabItem { Text("Multiplayer") }
+                .tag(Tab.multiplayer)
 
             characterAndLog
                 .tabItem { Text("Character + Log") }
@@ -401,6 +406,133 @@ struct DashboardView: View {
             .frame(maxHeight: .infinity)
         }
         .padding()
+    }
+
+    private var multiplayer: some View {
+        let active = appState.state.activeCharacter
+        let selected = appState.selectedCharacter
+        let target = appState.sessionStarted ? active : selected
+        let mode = target?.networkMode ?? "offline"
+        let locked = target?.networkLocked ?? false
+
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                GroupBox("Account") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let account = appState.multiplayerAccount {
+                            HStack {
+                                Text("Email:")
+                                Text(account.email).foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Public Name:")
+                                Text(account.publicName).foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Verified:")
+                                Text(account.verified ? "Yes" : "No")
+                                    .foregroundStyle(account.verified ? .green : .red)
+                            }
+                        } else {
+                            Text("No account linked yet.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                GroupBox("Session") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let session = appState.multiplayerSession {
+                            Text("Session: \(session.isExpired ? "Expired" : "Active")")
+                                .foregroundStyle(session.isExpired ? .red : .green)
+                            Text("Expires: \(session.expiresAt.formatted(.dateTime.year().month().day().hour().minute()))")
+                                .foregroundStyle(.secondary)
+                            HStack {
+                                Button("Sign Out (Local)") {
+                                    appState.multiplayerSignOutLocalSession()
+                                }
+                            }
+                        } else {
+                            Text("No active local session.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                GroupBox("Character Multiplayer Mode") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let target {
+                            HStack {
+                                Text("Character:")
+                                Text(target.name).foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Mode:")
+                                Text(mode.capitalized).foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Locked:")
+                                Text(locked ? "Yes" : "No").foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Realm ID:")
+                                Text(target.realmId ?? "-").foregroundStyle(.secondary)
+                            }
+                            HStack {
+                                Text("Server Character ID:")
+                                Text(target.serverCharacterId ?? "-").foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("No character selected.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                GroupBox("Realm + Guild Cache") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let realms = appState.multiplayerRealmCache?.realms, !realms.isEmpty {
+                            Text("Realms cached: \(realms.count)")
+                                .foregroundStyle(.secondary)
+                            ForEach(Array(realms.enumerated()), id: \.offset) { _, realm in
+                                Text("\(realm.name) [\(realm.realmId)]")
+                            }
+                        } else {
+                            Text("No realm cache yet.")
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Divider()
+
+                        if let guild = appState.multiplayerGuildCache {
+                            Text("Guild: \(guild.formalName) (\(guild.shortTag))")
+                            Text("Members: \(guild.memberCount)")
+                                .foregroundStyle(.secondary)
+                            Text("Alignment: \(guild.alignmentCode) • Type: \(guild.typeCode)")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("No guild cache yet.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                GroupBox("Connector") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("API: https://api.progressquest.me")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Admin: https://admin.progressquest.me")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Scaffold state: local models + tab shell only (no live API calls yet).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding()
+        }
     }
 
     private var settings: some View {
@@ -916,6 +1048,8 @@ struct DashboardView: View {
         switch appState.dashboardRequestedTab {
         case "settings":
             selectedTab = .settings
+        case "multiplayer":
+            selectedTab = .multiplayer
         default:
             selectedTab = .overview
         }

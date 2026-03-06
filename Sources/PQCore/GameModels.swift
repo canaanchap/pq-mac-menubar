@@ -197,6 +197,16 @@ public struct PlayerState: Codable, Hashable {
     public var task: GameTask?
     public var queue: [GameTask]
 
+    // Multiplayer metadata (v1 scaffold). These fields are persisted with the character save.
+    public var networkMode: String?
+    public var networkLocked: Bool?
+    public var realmId: String?
+    public var accountId: String?
+    public var serverCharacterId: String?
+    public var lastCheckinAt: Date?
+    public var lastAcceptedCheckpointId: String?
+    public var cheatRiskState: String?
+
     public init(
         id: UUID = UUID(),
         name: String,
@@ -231,6 +241,15 @@ public struct PlayerState: Codable, Hashable {
         self.taskBar = Bar(max: 1)
         self.task = nil
         self.queue = []
+
+        self.networkMode = "offline"
+        self.networkLocked = false
+        self.realmId = nil
+        self.accountId = nil
+        self.serverCharacterId = nil
+        self.lastCheckinAt = nil
+        self.lastAcceptedCheckpointId = nil
+        self.cheatRiskState = nil
     }
 
     public static func levelUpTime(_ level: Int) -> Double {
@@ -297,6 +316,10 @@ public struct PlayerState: Codable, Hashable {
 
     public var xpProgressPercent: Double {
         expBar.max > 0 ? (expBar.position / expBar.max) * 100 : 0
+    }
+
+    public var isOnlineMultiplayer: Bool {
+        networkMode == "online" && (networkLocked ?? false)
     }
 }
 

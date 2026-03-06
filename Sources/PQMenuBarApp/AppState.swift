@@ -117,12 +117,17 @@ final class AppState: ObservableObject {
     }
     @Published var modsValidationPassed: Bool = false
     @Published var modDryRunReport: String = "No mod validation run yet."
+    @Published var multiplayerAccount: MultiplayerAccountProfile?
+    @Published var multiplayerSession: MultiplayerSession?
+    @Published var multiplayerRealmCache: MultiplayerRealmCache?
+    @Published var multiplayerGuildCache: MultiplayerGuildCache?
 
     let dataDirectory: DataDirectory
     let saveStore: SaveStore
     let logStore: EventLogStore
     let runtime: GameRuntime
     @Published var dataBundle: PQDataBundle
+    let multiplayerStore: MultiplayerLocalStore
 
     private let rosterURL: URL
     private let portraitsURL: URL
@@ -149,6 +154,7 @@ final class AppState: ObservableObject {
             dataDirectory = try DataDirectory()
             saveStore = SaveStore(dataDirectory: dataDirectory)
             logStore = EventLogStore(dataDirectory: dataDirectory)
+            multiplayerStore = try MultiplayerLocalStore(dataDirectory: dataDirectory)
             rosterURL = dataDirectory.saves.appendingPathComponent("characters.json")
             portraitsURL = dataDirectory.data.appendingPathComponent("portraits", isDirectory: true)
             try FileManager.default.createDirectory(at: portraitsURL, withIntermediateDirectories: true)
@@ -195,6 +201,10 @@ final class AppState: ObservableObject {
             modDryRunReport = "No mod validation run yet."
             portraitPromptTemplateURL = dataDirectory.data.appendingPathComponent("portrait-prompt.txt")
             try Self.ensurePortraitPromptTemplate(at: portraitPromptTemplateURL)
+            multiplayerAccount = multiplayerStore.loadAccount()
+            multiplayerSession = multiplayerStore.loadSession()
+            multiplayerRealmCache = multiplayerStore.loadRealmCache()
+            multiplayerGuildCache = multiplayerStore.loadGuildCache()
 
             let loaded = try Self.loadRoster(from: rosterURL, saveStore: saveStore)
             roster = loaded.characters
@@ -589,6 +599,12 @@ final class AppState: ObservableObject {
 
     func openInFinder(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func multiplayerSignOutLocalSession() {
+        multiplayerSession = nil
+        try? multiplayerStore.saveSession(nil)
+        flash("Multiplayer session cleared.")
     }
 
     func refreshPortraitForCurrentCharacter() {
