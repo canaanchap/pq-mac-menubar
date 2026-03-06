@@ -366,11 +366,11 @@ final class AppState: ObservableObject {
     func menubarLabelText(started: Bool, character: PlayerState) -> String {
         guard started else { return "Lv ?" }
         let mode = menubarTrackMode(for: character)
-        if mode == .level || showLevelLabelInMenubar {
-            return "Lv \(character.level)"
-        }
         if showCharacterNameInMenubar {
             return character.name
+        }
+        if mode == .level || showLevelLabelInMenubar {
+            return "Lv \(character.level)"
         }
         switch mode {
         case .level:
