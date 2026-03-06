@@ -3,5 +3,4 @@
 .swiftpm/
 **/.swiftpm/
 .DS_Store
-.build/
-**/.build/
+pq/
