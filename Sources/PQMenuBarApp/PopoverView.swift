@@ -49,7 +49,7 @@ struct PopoverView: View {
             )) {
                 Text("-").tag(Optional<UUID>.none)
                 ForEach(appState.roster, id: \.id) { c in
-                    Text("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)")
+                    characterPickerLabel(c)
                         .tag(Optional(c.id))
                 }
             }
@@ -115,6 +115,12 @@ struct PopoverView: View {
             TextField(suggestedCharacterName.isEmpty ? "Name" : suggestedCharacterName, text: $newCharacterName)
             Toggle("Online Multiplayer (immutable)", isOn: $newCharacterOnlineMode)
                 .toggleStyle(.switch)
+                .disabled(!appState.canUseOnlineMultiplayer)
+            if !appState.canUseOnlineMultiplayer {
+                Text("Online multiplayer requires a verified signed-in account.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Picker("Race", selection: $newCharacterRace) {
                 ForEach(Array(appState.dataBundle.races.map(\.name).enumerated()), id: \.offset) { _, race in
@@ -279,7 +285,7 @@ struct PopoverView: View {
         newCharacterName = ""
         rolledStats = appState.rollStats()
         previousRolledStats = nil
-        newCharacterOnlineMode = false
+        newCharacterOnlineMode = appState.canUseOnlineMultiplayer
         creatingCharacter = true
     }
 
@@ -289,6 +295,16 @@ struct PopoverView: View {
                 .frame(width: 70, alignment: .leading)
             Text("\(value)")
             Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private func characterPickerLabel(_ c: PlayerState) -> some View {
+        if c.isOnlineMultiplayer {
+            Label("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)", systemImage: "globe")
+                .foregroundStyle(.secondary)
+        } else {
+            Text("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)")
         }
     }
 

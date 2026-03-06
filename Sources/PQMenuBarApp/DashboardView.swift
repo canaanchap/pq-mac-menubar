@@ -56,9 +56,10 @@ struct DashboardView: View {
     @State private var multiplayerPasswordDraft: String = ""
     @State private var multiplayerPublicNameDraft: String = ""
     @State private var multiplayerWantsNewsDraft: Bool = true
-    @State private var multiplayerVerifyCodeDraft: String = ""
     @State private var multiplayerSignInEmailDraft: String = ""
     @State private var multiplayerSignInPasswordDraft: String = ""
+    @State private var showCreateAccountSheet: Bool = false
+    @State private var showAccountSettingsSheet: Bool = false
 
     private let tickRateOptions: [Double] = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
     private var canShowMultiplayerTab: Bool {
@@ -157,6 +158,12 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showCreateCharacterDialog) {
             createCharacterDialog
+        }
+        .sheet(isPresented: $showCreateAccountSheet) {
+            createAccountDialog
+        }
+        .sheet(isPresented: $showAccountSettingsSheet) {
+            accountSettingsDialog
         }
     }
 
@@ -543,156 +550,143 @@ struct DashboardView: View {
     private var settings: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                GroupBox("Gameplay") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Runtime State: \(appState.runtimeStateMarker.rawValue)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack {
-                            Text("Track What With Menubar Icon?")
-                            Picker("Track What With Menubar Icon?", selection: Binding(
-                                get: { appState.currentMenubarTrackMode },
-                                set: { appState.setCurrentMenubarTrackMode($0) }
-                            )) {
-                                ForEach(MenubarIconTrackMode.allCases) { mode in
-                                    Text(mode.rawValue).tag(mode)
+                HStack(alignment: .top, spacing: 14) {
+                    GroupBox("Character Library") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Picker("Selected", selection: Binding(
+                                    get: { appState.selectedCharacterID },
+                                    set: {
+                                        appState.selectedCharacterID = $0
+                                        appState.refreshPortraitForCurrentCharacter()
+                                    }
+                                )) {
+                                    Text("-").tag(Optional<UUID>.none)
+                                    ForEach(appState.roster, id: \.id) { c in
+                                        characterPickerLabel(c).tag(Optional(c.id))
+                                    }
                                 }
-                            }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                        }
-                        Toggle("Show Level Instead of Selected Progress?", isOn: $appState.showLevelLabelInMenubar)
-                            .toggleStyle(.switch)
-                            .disabled(appState.currentMenubarTrackMode == .level)
-                        Toggle("Compact menubar mode (shield only)", isOn: $appState.compactMode)
-                            .toggleStyle(.switch)
-                        Toggle("Persistent progress window (minimize + frame restore)", isOn: $appState.persistentDashboardWindow)
-                            .toggleStyle(.switch)
-                        Toggle(
-                            "Low CPU mode",
-                            isOn: Binding(
-                                get: { appState.state.lowCPUMode },
-                                set: { _ in appState.toggleLowCPU() }
-                            )
-                        )
-                        .toggleStyle(.switch)
-                        HStack {
-                            Button(appState.sessionStarted ? (appState.state.isPaused ? "Resume" : "Pause") : "Start") {
-                                if appState.sessionStarted {
-                                    appState.togglePause()
-                                } else {
-                                    appState.startSelectedCharacter()
+                                .pickerStyle(.menu)
+
+                                Button("Load and Start") {
+                                    appState.loadAndStartSelectedCharacter()
+                                    selectedTab = .overview
                                 }
+                                .disabled(appState.selectedCharacterID == nil)
                             }
-                            .disabled(!appState.sessionStarted && appState.roster.isEmpty)
-                            Button("Close Current Character") {
-                                appState.closeCurrentCharacter()
-                            }
-                            .disabled(!appState.sessionStarted)
-                            Button("Save Now") {
-                                appState.saveNow()
-                            }
-                            .disabled(!appState.sessionStarted)
-                            Button("Quit App") {
-                                appState.quitApp()
+
+                            HStack {
+                                Button("New Character") {
+                                    beginCreateCharacterDialog()
+                                }
+                                Button("Delete Selected") { appState.deleteSelectedCharacter() }
+                                    .disabled(appState.selectedCharacterID == nil)
+                                Button("Upload (Import)") { appState.importCharacterInteractive() }
+                                Button("Download (Export)") { appState.exportCharacterInteractive() }
+                                    .disabled(appState.selectedCharacterID == nil)
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                    GroupBox("Gameplay") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Runtime State: \(appState.runtimeStateMarker.rawValue)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            HStack {
+                                Text("Track What With Menubar Icon?")
+                                Picker("Track What With Menubar Icon?", selection: Binding(
+                                    get: { appState.currentMenubarTrackMode },
+                                    set: { appState.setCurrentMenubarTrackMode($0) }
+                                )) {
+                                    ForEach(MenubarIconTrackMode.allCases) { mode in
+                                        Text(mode.rawValue).tag(mode)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .labelsHidden()
+                            }
+                            Toggle("Show Level Instead of Selected Progress?", isOn: $appState.showLevelLabelInMenubar)
+                                .toggleStyle(.switch)
+                                .disabled(appState.currentMenubarTrackMode == .level)
+                            Toggle("Show Character's Name Instead of Progress?", isOn: $appState.showCharacterNameInMenubar)
+                                .toggleStyle(.switch)
+                                .disabled(appState.currentMenubarTrackMode == .level)
+                            Toggle("Compact menubar mode (shield only)", isOn: $appState.compactMode)
+                                .toggleStyle(.switch)
+                            Toggle("Persistent progress window (minimize + frame restore)", isOn: $appState.persistentDashboardWindow)
+                                .toggleStyle(.switch)
+                            Toggle(
+                                "Low CPU mode",
+                                isOn: Binding(
+                                    get: { appState.state.lowCPUMode },
+                                    set: { _ in appState.toggleLowCPU() }
+                                )
+                            )
+                            .toggleStyle(.switch)
+                            HStack {
+                                Button(appState.sessionStarted ? (appState.state.isPaused ? "Resume" : "Pause") : "Start") {
+                                    if appState.sessionStarted {
+                                        appState.togglePause()
+                                    } else {
+                                        appState.startSelectedCharacter()
+                                    }
+                                }
+                                .disabled(!appState.sessionStarted && appState.roster.isEmpty)
+                                Button("Close Current Character") {
+                                    appState.closeCurrentCharacter()
+                                }
+                                .disabled(!appState.sessionStarted)
+                                Button("Save Now") {
+                                    appState.saveNow()
+                                }
+                                .disabled(!appState.sessionStarted)
+                                Button("Quit App") {
+                                    appState.quitApp()
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
 
                 GroupBox("Multiplayer Account") {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Text("API Base URL")
-                                .frame(width: 120, alignment: .leading)
-                            TextField("https://api.progressquest.me", text: $appState.multiplayerAPIBaseURL)
-                        }
-                        if let account = appState.multiplayerAccount {
-                            Text("Account: \(account.email) • \(account.publicName)")
-                                .foregroundStyle(.secondary)
-                            Text("Verified: \(account.verified ? "Yes" : "No")")
-                                .foregroundStyle(account.verified ? .green : .red)
-                        } else {
-                            Text("No multiplayer account configured.")
-                                .foregroundStyle(.secondary)
-                        }
-
-                        HStack {
-                            TextField("Email", text: $multiplayerEmailDraft)
-                            SecureField("Password", text: $multiplayerPasswordDraft)
-                            TextField("Public Name", text: $multiplayerPublicNameDraft)
-                            Toggle("News", isOn: $multiplayerWantsNewsDraft)
-                                .toggleStyle(.switch)
-                        }
-                        HStack {
-                            Button("Create Account") {
-                                appState.multiplayerRegisterAccount(
-                                    email: multiplayerEmailDraft,
-                                    password: multiplayerPasswordDraft,
-                                    publicName: multiplayerPublicNameDraft,
-                                    wantsNews: multiplayerWantsNewsDraft
-                                )
-                            }
-                        }
-
-                        HStack {
-                            TextField("Verify Email", text: $multiplayerEmailDraft)
-                            TextField("Code", text: $multiplayerVerifyCodeDraft)
-                            Button("Verify Account") {
-                                appState.multiplayerVerifyAccount(email: multiplayerEmailDraft, code: multiplayerVerifyCodeDraft)
-                            }
-                        }
-
-                        HStack {
-                            TextField("Sign-in Email", text: $multiplayerSignInEmailDraft)
-                            SecureField("Sign-in Password", text: $multiplayerSignInPasswordDraft)
-                            Button("Sign In") {
+                            TextField("Email", text: $multiplayerSignInEmailDraft)
+                            SecureField("Password", text: $multiplayerSignInPasswordDraft)
+                            Button("Login") {
                                 appState.multiplayerSignIn(email: multiplayerSignInEmailDraft, password: multiplayerSignInPasswordDraft)
                             }
-                            Button("Validate Session") {
-                                appState.multiplayerRefreshSession()
-                            }
-                            Button("Sign Out") {
-                                appState.multiplayerSignOutLocalSession()
-                            }
-                            .disabled(appState.multiplayerSession == nil)
-                        }
-                    }
-                }
-
-                GroupBox("Character Library") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Picker("Selected", selection: Binding(
-                                get: { appState.selectedCharacterID },
-                                set: {
-                                    appState.selectedCharacterID = $0
-                                    appState.refreshPortraitForCurrentCharacter()
-                                }
-                            )) {
-                                Text("-").tag(Optional<UUID>.none)
-                                ForEach(appState.roster, id: \.id) { c in
-                                    Text("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)").tag(Optional(c.id))
-                                }
-                            }
-                            .pickerStyle(.menu)
-
-                            Button("Load and Start") {
-                                appState.loadAndStartSelectedCharacter()
-                                selectedTab = .overview
-                            }
-                            .disabled(appState.selectedCharacterID == nil)
                         }
 
                         HStack {
-                            Button("New Character") {
-                                beginCreateCharacterDialog()
+                            Text("Don't have an account yet?")
+                                .foregroundStyle(.secondary)
+                            Button("Create Account") {
+                                multiplayerEmailDraft = multiplayerSignInEmailDraft
+                                showCreateAccountSheet = true
                             }
-                            Button("Delete Selected") { appState.deleteSelectedCharacter() }
-                                .disabled(appState.selectedCharacterID == nil)
-                            Button("Upload (Import)") { appState.importCharacterInteractive() }
-                            Button("Download (Export)") { appState.exportCharacterInteractive() }
-                                .disabled(appState.selectedCharacterID == nil)
+                        }
+
+                        if let account = appState.multiplayerAccount {
+                            if account.verified {
+                                Label("Verified", systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            } else {
+                                Label("Not verified", systemImage: "xmark.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                            HStack {
+                                Button("Account Settings") {
+                                    showAccountSettingsSheet = true
+                                }
+                                Button("Sign Out") {
+                                    appState.multiplayerSignOutLocalSession()
+                                }
+                                .disabled(appState.multiplayerSession == nil)
+                            }
                         }
                     }
                 }
@@ -1245,6 +1239,12 @@ struct DashboardView: View {
             TextField(newCharacterNameSuggestion.isEmpty ? "Name" : newCharacterNameSuggestion, text: $newCharacterNameDraft)
             Toggle("Online Multiplayer (immutable)", isOn: $newCharacterOnlineModeDraft)
                 .toggleStyle(.switch)
+                .disabled(!appState.canUseOnlineMultiplayer)
+            if !appState.canUseOnlineMultiplayer {
+                Text("Online multiplayer requires a verified signed-in account.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Picker("Race", selection: $newCharacterRaceDraft) {
                 ForEach(Array(appState.dataBundle.races.map(\.name).enumerated()), id: \.offset) { _, race in
@@ -1321,7 +1321,7 @@ struct DashboardView: View {
         newCharacterClassDraft = appState.dataBundle.classes.first?.name ?? "Ur-Paladin"
         newCharacterStatsDraft = appState.rollStats()
         previousCharacterStatsDraft = nil
-        newCharacterOnlineModeDraft = false
+        newCharacterOnlineModeDraft = appState.canUseOnlineMultiplayer
         showCreateCharacterDialog = true
     }
 
@@ -1363,6 +1363,109 @@ struct DashboardView: View {
         showCreateCharacterDialog = false
         if startImmediately {
             selectedTab = .overview
+        }
+    }
+
+    @ViewBuilder
+    private func characterPickerLabel(_ c: PlayerState) -> some View {
+        if c.isOnlineMultiplayer {
+            Label("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)", systemImage: "globe")
+                .foregroundStyle(.secondary)
+        } else {
+            Text("\(c.name) • Lv \(c.level) \(c.race) \(c.characterClass)")
+        }
+    }
+
+    private var createAccountDialog: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Create Multiplayer Account")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                Button {
+                    showCreateAccountSheet = false
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+            }
+
+            TextField("Email", text: $multiplayerEmailDraft)
+            SecureField("Password", text: $multiplayerPasswordDraft)
+            TextField("Public Name", text: $multiplayerPublicNameDraft)
+
+            HStack {
+                Button("Create Account") {
+                    appState.multiplayerRegisterAccount(
+                        email: multiplayerEmailDraft,
+                        password: multiplayerPasswordDraft,
+                        publicName: multiplayerPublicNameDraft,
+                        wantsNews: true
+                    )
+                    showCreateAccountSheet = false
+                }
+                .disabled(
+                    multiplayerEmailDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || multiplayerPasswordDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || multiplayerPublicNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+                Button("Cancel") {
+                    showCreateAccountSheet = false
+                }
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 420)
+        .onExitCommand {
+            showCreateAccountSheet = false
+        }
+    }
+
+    private var accountSettingsDialog: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Account Settings")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                Button {
+                    showAccountSettingsSheet = false
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+            }
+            if let account = appState.multiplayerAccount {
+                Text("Display Name: \(account.publicName)")
+                Toggle(
+                    "Receive news?",
+                    isOn: Binding(
+                        get: { account.wantsNews },
+                        set: { appState.updateMultiplayerNewsPreference($0) }
+                    )
+                )
+                .toggleStyle(.switch)
+                if account.verified {
+                    Label("Verified", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Label("Not verified (online multiplayer disabled)", systemImage: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                }
+            } else {
+                Text("No account configured.")
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button("Close") {
+                    showAccountSettingsSheet = false
+                }
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 420)
+        .onExitCommand {
+            showAccountSettingsSheet = false
         }
     }
 

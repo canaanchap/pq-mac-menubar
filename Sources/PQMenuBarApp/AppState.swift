@@ -89,7 +89,18 @@ final class AppState: ObservableObject {
     }
     @Published var showLevelLabelInMenubar: Bool {
         didSet {
+            if showLevelLabelInMenubar {
+                showCharacterNameInMenubar = false
+            }
             UserDefaults.standard.set(showLevelLabelInMenubar, forKey: Self.showLevelLabelInMenubarDefaultsKey)
+        }
+    }
+    @Published var showCharacterNameInMenubar: Bool {
+        didSet {
+            if showCharacterNameInMenubar {
+                showLevelLabelInMenubar = false
+            }
+            UserDefaults.standard.set(showCharacterNameInMenubar, forKey: Self.showCharacterNameInMenubarDefaultsKey)
         }
     }
     @Published var modsFeatureEnabled: Bool {
@@ -143,6 +154,7 @@ final class AppState: ObservableObject {
     private static let betaReentryMaskDefaultsKey = "pq.debug.betaReentryMask"
     private static let menubarTrackByCharacterDefaultsKey = "pq.menubar.trackByCharacter"
     private static let showLevelLabelInMenubarDefaultsKey = "pq.menubar.showLevelLabel"
+    private static let showCharacterNameInMenubarDefaultsKey = "pq.menubar.showCharacterName"
     private static let compactModeDefaultsKey = "pq.menubar.compactMode"
     private static let modsFeatureEnabledDefaultsKey = "pq.mods.featureEnabled"
     private static let modsActiveDefaultsKey = "pq.mods.active"
@@ -180,6 +192,7 @@ final class AppState: ObservableObject {
             } else {
                 showLevelLabelInMenubar = UserDefaults.standard.bool(forKey: Self.showLevelLabelInMenubarDefaultsKey)
             }
+            showCharacterNameInMenubar = UserDefaults.standard.bool(forKey: Self.showCharacterNameInMenubarDefaultsKey)
             let modsFeatureEnabledLoaded = false
             let modsActiveLoaded = false
             modsFeatureEnabled = modsFeatureEnabledLoaded
@@ -312,6 +325,12 @@ final class AppState: ObservableObject {
         return selectedCharacter
     }
 
+    var canUseOnlineMultiplayer: Bool {
+        guard let account = multiplayerAccount, account.verified else { return false }
+        guard let session = multiplayerSession else { return false }
+        return !session.isExpired
+    }
+
     var currentMenubarTrackMode: MenubarIconTrackMode {
         guard let character = currentContextCharacter else { return .level }
         return menubarTrackByCharacterID[character.id] ?? .level
@@ -349,6 +368,9 @@ final class AppState: ObservableObject {
         let mode = menubarTrackMode(for: character)
         if mode == .level || showLevelLabelInMenubar {
             return "Lv \(character.level)"
+        }
+        if showCharacterNameInMenubar {
+            return character.name
         }
         switch mode {
         case .level:
@@ -676,10 +698,15 @@ final class AppState: ObservableObject {
                 if let code = data["verificationCodeForDebug"] as? String, !code.isEmpty {
                     self.flash("Registered. Debug verification code: \(code)")
                 } else {
-                    self.flash("Registered. Verify your account next.")
+                    self.flash("Registered. Account must be verified before online multiplayer.")
                 }
             } catch {
-                self.flash("Register failed: \(error.localizedDescription)")
+                let lower = error.localizedDescription.lowercased()
+                if lower.contains("already exists") {
+                    self.flash("This email is already associated with an account. We currently cannot reset passwords.")
+                } else {
+                    self.flash("Register failed: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -772,9 +799,23 @@ final class AppState: ObservableObject {
                 try? self.multiplayerStore.saveSession(session)
                 self.flash("Signed in.")
             } catch {
-                self.flash("Sign in failed: \(error.localizedDescription)")
+                let lower = error.localizedDescription.lowercased()
+                if lower.contains("not verified") {
+                    self.flash("Not verified. Ask admin to verify this account before online multiplayer.")
+                } else {
+                    self.flash("Sign in failed: \(error.localizedDescription)")
+                }
             }
         }
+    }
+
+    func updateMultiplayerNewsPreference(_ wantsNews: Bool) {
+        guard var account = multiplayerAccount else { return }
+        account.wantsNews = wantsNews
+        account.updatedAt = Date()
+        multiplayerAccount = account
+        try? multiplayerStore.saveAccount(account)
+        flash("Account setting saved.")
     }
 
     func multiplayerRefreshSession() {
