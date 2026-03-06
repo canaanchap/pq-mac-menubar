@@ -14,6 +14,8 @@ To run a dev build:
 `./scripts/dev-build.sh`
 `swift run PQMenuBarApp`
 
+Versions:
+- 8.x.x: the multiplayer additions
 
 ### 💰 Donate
 *   **Bitcoin (BTC):** `bc1qzfgs6qmll6c28cz49xat8pgkpsd4x86e4zuvqe`
