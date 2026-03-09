@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/Handlers/AccountHandler.php';
+require_once __DIR__ . '/Handlers/AdminHandler.php';
 
 function route_request(string $method, string $uri): array {
     $path = parse_url($uri, PHP_URL_PATH) ?? '/';
@@ -18,15 +19,26 @@ function route_request(string $method, string $uri): array {
     }
 
     if ($path === '/api/v1/realms' && $method === 'GET') {
+        ensure_default_realm_seeded();
+        $pdo = db();
+        $stmt = $pdo->query('
+            SELECT realm_uid, name, status, supports_guilds
+            FROM realms
+            ORDER BY created_at ASC
+        ');
+        $rows = $stmt->fetchAll() ?: [];
+        $realms = array_map(static function (array $row): array {
+            return [
+                'realmId' => (string)$row['realm_uid'],
+                'name' => (string)$row['name'],
+                'status' => (string)$row['status'],
+                'supportsGuilds' => ((int)$row['supports_guilds']) === 1,
+            ];
+        }, $rows);
         return [
             'status' => 200,
             'body' => json_success([
-                'realms' => [[
-                    'realmId' => env_value('PQ_REALM_ID', 'realm_global_1'),
-                    'name' => env_value('PQ_REALM_NAME', 'The One Global Realm'),
-                    'status' => 'active',
-                    'supportsGuilds' => true,
-                ]],
+                'realms' => $realms,
             ]),
         ];
     }
@@ -45,6 +57,34 @@ function route_request(string $method, string $uri): array {
 
     if ($path === '/api/v1/account/session' && $method === 'POST') {
         return AccountHandler::session(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/login' && $method === 'POST') {
+        return AdminHandler::login(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/logout' && $method === 'POST') {
+        return AdminHandler::logout();
+    }
+
+    if ($path === '/api/v1/admin/session' && $method === 'GET') {
+        return AdminHandler::session();
+    }
+
+    if ($path === '/api/v1/admin/accounts' && $method === 'GET') {
+        return AdminHandler::accounts();
+    }
+
+    if ($path === '/api/v1/admin/force-verify' && $method === 'POST') {
+        return AdminHandler::forceVerify(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/realms' && $method === 'GET') {
+        return AdminHandler::realmsList();
+    }
+
+    if ($path === '/api/v1/admin/realms/create' && $method === 'POST') {
+        return AdminHandler::realmsCreate(parse_json_body());
     }
 
     $stubRoutes = [

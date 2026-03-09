@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS account_sessions (
   FOREIGN KEY (account_id) REFERENCES accounts(id)
 );
 
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(80) NOT NULL,
+  session_token_hash VARCHAR(255) NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  revoked_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS realms (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   realm_uid VARCHAR(64) NOT NULL UNIQUE,
@@ -179,3 +188,7 @@ CREATE TABLE IF NOT EXISTS checkin_flags (
   reviewed_at DATETIME DEFAULT NULL,
   FOREIGN KEY (checkin_id) REFERENCES character_checkins(id)
 );
+
+CREATE INDEX idx_accounts_email_verified ON accounts (email, verified);
+CREATE INDEX idx_guild_members_guild_status ON guild_members (guild_id, status);
+CREATE INDEX idx_guild_logs_guild_created ON guild_logs (guild_id, created_at);

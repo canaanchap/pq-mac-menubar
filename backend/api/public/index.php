@@ -34,6 +34,18 @@ if (!$loaded) {
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOrigin = env_value('PQ_ADMIN_UI_ORIGIN', 'https://admin.progressquest.me');
+if ($origin !== '' && $origin === $allowedOrigin) {
+    header('Access-Control-Allow-Origin: ' . $allowedOrigin);
+    header('Access-Control-Allow-Headers: Content-Type, Authorization');
+    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+}
+
+if ($method === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
 
 try {
     $route = route_request($method, $uri);

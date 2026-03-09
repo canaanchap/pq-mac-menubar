@@ -121,3 +121,59 @@ function token_hash(string $raw): string {
 function email_is_valid(string $email): bool {
     return (bool)filter_var($email, FILTER_VALIDATE_EMAIL);
 }
+
+function bearer_token_from_request(): ?string {
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if ($header === '') {
+        return null;
+    }
+    if (!preg_match('/^Bearer\s+(.+)$/i', $header, $m)) {
+        return null;
+    }
+    return trim($m[1]);
+}
+
+function require_admin_session_or_error(): ?array {
+    $token = bearer_token_from_request();
+    if ($token === null || $token === '') {
+        return json_error('ADMIN_AUTH_REQUIRED', 'Missing admin bearer token.', [], 401);
+    }
+
+    $pdo = db();
+    $stmt = $pdo->prepare('
+        SELECT username, expires_at, revoked_at
+        FROM admin_sessions
+        WHERE session_token_hash = ?
+        LIMIT 1
+    ');
+    $stmt->execute([token_hash($token)]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return json_error('ADMIN_SESSION_NOT_FOUND', 'Admin session not found.', [], 401);
+    }
+    if ($row['revoked_at'] !== null) {
+        return json_error('ADMIN_SESSION_REVOKED', 'Admin session revoked.', [], 401);
+    }
+    if (strtotime((string)$row['expires_at']) < time()) {
+        return json_error('ADMIN_SESSION_EXPIRED', 'Admin session expired.', [], 401);
+    }
+    return null;
+}
+
+function ensure_default_realm_seeded(): void {
+    $realmId = env_value('PQ_REALM_ID', 'realm_goobland_1');
+    $realmName = env_value('PQ_REALM_NAME', 'Goobland');
+    $now = now_utc();
+
+    $pdo = db();
+    $stmt = $pdo->prepare('SELECT id FROM realms WHERE realm_uid = ? LIMIT 1');
+    $stmt->execute([$realmId]);
+    if ($stmt->fetch()) {
+        return;
+    }
+    $insert = $pdo->prepare('
+        INSERT INTO realms (realm_uid, name, status, supports_guilds, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ');
+    $insert->execute([$realmId, $realmName, 'active', 1, $now, $now]);
+}
