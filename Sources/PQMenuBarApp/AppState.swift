@@ -132,6 +132,7 @@ final class AppState: ObservableObject {
     @Published var multiplayerSession: MultiplayerSession?
     @Published var multiplayerRealmCache: MultiplayerRealmCache?
     @Published var multiplayerGuildCache: MultiplayerGuildCache?
+    @Published var lastMultiplayerDebugVerificationCode: String?
     @Published var multiplayerAPIBaseURL: String {
         didSet {
             UserDefaults.standard.set(multiplayerAPIBaseURL, forKey: Self.multiplayerAPIBaseURLDefaultsKey)
@@ -225,6 +226,7 @@ final class AppState: ObservableObject {
             multiplayerSession = multiplayerStore.loadSession()
             multiplayerRealmCache = multiplayerStore.loadRealmCache()
             multiplayerGuildCache = multiplayerStore.loadGuildCache()
+            lastMultiplayerDebugVerificationCode = nil
 
             let loaded = try Self.loadRoster(from: rosterURL, saveStore: saveStore)
             roster = loaded.characters
@@ -329,6 +331,18 @@ final class AppState: ObservableObject {
         guard let account = multiplayerAccount, account.verified else { return false }
         guard let session = multiplayerSession else { return false }
         return !session.isExpired
+    }
+
+    func multiplayerOwnershipMismatchMessage(for character: PlayerState) -> String? {
+        guard character.isOnlineMultiplayer else { return nil }
+        guard let ownerAccountId = character.accountId, !ownerAccountId.isEmpty else { return nil }
+        guard let signedIn = multiplayerAccount else {
+            return "This character is owned by another account. We will not track nor report progress until you sign into the correct account."
+        }
+        if signedIn.accountId != ownerAccountId {
+            return "This character is owned by another account. We will not track nor report progress until you sign into the correct account."
+        }
+        return nil
     }
 
     var currentMenubarTrackMode: MenubarIconTrackMode {
@@ -437,6 +451,10 @@ final class AppState: ObservableObject {
     }
 
     private func start(character: PlayerState, emitFlash: Bool) {
+        if let mismatch = multiplayerOwnershipMismatchMessage(for: character) {
+            flash(mismatch)
+        }
+
         var next = GameState(
             activeCharacter: character,
             isPaused: false,
@@ -504,6 +522,9 @@ final class AppState: ObservableObject {
         var c = PlayerState(name: name, race: race, characterClass: className, stats: newStats)
         c.networkMode = networkMode
         c.networkLocked = true
+        if networkMode == "online", let account = multiplayerAccount {
+            c.accountId = account.accountId
+        }
         roster.append(c)
         selectedCharacterID = c.id
         recentEventsByCharacterID[c.id] = []
@@ -696,8 +717,10 @@ final class AppState: ObservableObject {
                 try? self.multiplayerStore.saveAccount(account)
 
                 if let code = data["verificationCodeForDebug"] as? String, !code.isEmpty {
+                    self.lastMultiplayerDebugVerificationCode = code
                     self.flash("Registered. Debug verification code: \(code)")
                 } else {
+                    self.lastMultiplayerDebugVerificationCode = nil
                     self.flash("Registered. Account must be verified before online multiplayer.")
                 }
             } catch {
@@ -797,6 +820,7 @@ final class AppState: ObservableObject {
                 )
                 self.multiplayerSession = session
                 try? self.multiplayerStore.saveSession(session)
+                self.reconcileOnlineCharacterOwnership()
                 self.flash("Signed in.")
             } catch {
                 let lower = error.localizedDescription.lowercased()
@@ -811,11 +835,32 @@ final class AppState: ObservableObject {
 
     func updateMultiplayerNewsPreference(_ wantsNews: Bool) {
         guard var account = multiplayerAccount else { return }
+        if let session = multiplayerSession, !session.isExpired {
+            Task {
+                do {
+                    let payload: [String: Any] = [
+                        "sessionToken": session.sessionToken,
+                        "wantsNews": wantsNews,
+                    ]
+                    let json = try await self.multiplayerPOST(path: "/api/v1/account/settings", payload: payload)
+                    let data = try self.extractData(json)
+                    let serverAccount = data["account"] as? [String: Any] ?? [:]
+                    account.wantsNews = (serverAccount["wantsNews"] as? Bool) ?? wantsNews
+                    account.updatedAt = Date()
+                    self.multiplayerAccount = account
+                    try? self.multiplayerStore.saveAccount(account)
+                    self.flash("Account setting saved.")
+                } catch {
+                    self.flash("Account setting update failed: \(error.localizedDescription)")
+                }
+            }
+            return
+        }
         account.wantsNews = wantsNews
         account.updatedAt = Date()
         multiplayerAccount = account
         try? multiplayerStore.saveAccount(account)
-        flash("Account setting saved.")
+        flash("Account setting saved locally.")
     }
 
     func multiplayerRefreshSession() {
@@ -849,6 +894,7 @@ final class AppState: ObservableObject {
                     issuedAt: session.issuedAt
                 )
                 try? self.multiplayerStore.saveSession(self.multiplayerSession)
+                self.reconcileOnlineCharacterOwnership()
                 self.flash("Session valid.")
             } catch {
                 self.flash("Session check failed: \(error.localizedDescription)")
@@ -899,6 +945,20 @@ final class AppState: ObservableObject {
     private static func parseISO8601Date(_ value: String) -> Date? {
         let fmt = ISO8601DateFormatter()
         return fmt.date(from: value)
+    }
+
+    private func reconcileOnlineCharacterOwnership() {
+        guard let signedIn = multiplayerAccount else { return }
+        var changed = false
+        for idx in roster.indices {
+            if roster[idx].isOnlineMultiplayer && (roster[idx].accountId == nil || roster[idx].accountId?.isEmpty == true) {
+                roster[idx].accountId = signedIn.accountId
+                changed = true
+            }
+        }
+        if changed {
+            persistRoster()
+        }
     }
 
     func refreshPortraitForCurrentCharacter() {

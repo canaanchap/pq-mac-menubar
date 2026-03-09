@@ -251,4 +251,62 @@ final class AccountHandler {
             ]),
         ];
     }
+
+    public static function updateSettings(array $body): array {
+        $token = trim((string)($body['sessionToken'] ?? ''));
+        if ($token === '') {
+            return json_error('VALIDATION_SESSION_TOKEN', 'sessionToken is required.');
+        }
+        if (!array_key_exists('wantsNews', $body)) {
+            return json_error('VALIDATION_WANTS_NEWS', 'wantsNews is required.', [], 422);
+        }
+        $wantsNews = (bool)$body['wantsNews'];
+
+        $pdo = db();
+        $stmt = $pdo->prepare('
+            SELECT s.account_id, s.expires_at, s.revoked_at
+            FROM account_sessions s
+            WHERE s.session_token_hash = ?
+            LIMIT 1
+        ');
+        $stmt->execute([token_hash($token)]);
+        $session = $stmt->fetch();
+        if (!$session) {
+            return json_error('SESSION_NOT_FOUND', 'Session not found.', [], 404);
+        }
+        if ($session['revoked_at'] !== null) {
+            return json_error('SESSION_REVOKED', 'Session revoked.', [], 401);
+        }
+        if (strtotime((string)$session['expires_at']) < time()) {
+            return json_error('SESSION_EXPIRED', 'Session expired.', [], 401);
+        }
+
+        $update = $pdo->prepare('UPDATE accounts SET wants_news = ?, updated_at = ? WHERE id = ?');
+        $update->execute([$wantsNews ? 1 : 0, now_utc(), (int)$session['account_id']]);
+
+        $accountStmt = $pdo->prepare('
+            SELECT account_uid, email, public_name, wants_news, verified
+            FROM accounts
+            WHERE id = ?
+            LIMIT 1
+        ');
+        $accountStmt->execute([(int)$session['account_id']]);
+        $account = $accountStmt->fetch();
+        if (!$account) {
+            return json_error('ACCOUNT_NOT_FOUND', 'Account not found.', [], 404);
+        }
+
+        return [
+            'status' => 200,
+            'body' => json_success([
+                'account' => [
+                    'accountId' => (string)$account['account_uid'],
+                    'email' => (string)$account['email'],
+                    'publicName' => (string)$account['public_name'],
+                    'wantsNews' => ((int)$account['wants_news']) === 1,
+                    'verified' => ((int)$account['verified']) === 1,
+                ],
+            ]),
+        ];
+    }
 }

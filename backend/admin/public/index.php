@@ -169,12 +169,14 @@ $apiBase = 'https://api.progressquest.me/api/v1';
         document.getElementById("loginCard").classList.add("hidden");
         document.getElementById("adminPanel").classList.remove("hidden");
         document.getElementById("sessionBadge").textContent = `Admin: ${data.username}`;
+        setStatus("loginStatus", "", true);
         await Promise.all([refreshAccounts(), refreshRealms()]);
-      } catch {
+      } catch (e) {
         setToken("");
         document.getElementById("loginCard").classList.remove("hidden");
         document.getElementById("adminPanel").classList.add("hidden");
         document.getElementById("sessionBadge").textContent = "Not logged in";
+        setStatus("loginStatus", `Login/session failed: ${e.message}`, false);
       }
     }
 

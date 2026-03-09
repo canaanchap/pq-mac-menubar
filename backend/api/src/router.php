@@ -59,6 +59,10 @@ function route_request(string $method, string $uri): array {
         return AccountHandler::session(parse_json_body());
     }
 
+    if ($path === '/api/v1/account/settings' && $method === 'POST') {
+        return AccountHandler::updateSettings(parse_json_body());
+    }
+
     if ($path === '/api/v1/admin/login' && $method === 'POST') {
         return AdminHandler::login(parse_json_body());
     }

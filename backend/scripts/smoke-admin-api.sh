@@ -17,6 +17,10 @@ if [[ -z "$ADMIN_USER" || -z "$ADMIN_PASS" ]]; then
   echo "Set ADMIN_USER and ADMIN_PASS env vars first." >&2
   exit 1
 fi
+if [[ "$ADMIN_USER" == "YOUR_ADMIN_USER" || "$ADMIN_PASS" == "YOUR_ADMIN_PASS" ]]; then
+  echo "Replace placeholder admin credentials with real values." >&2
+  exit 1
+fi
 
 echo "==> Health"
 curl -sS "$API_BASE/health" | jq .

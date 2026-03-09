@@ -66,3 +66,18 @@
   - index: `accounts(email, verified)`
   - index: `guild_members(guild_id, status)`
   - index: `guild_logs(guild_id, created_at)`
+
+### Follow-up fixes
+- Added account settings API endpoint:
+  - `POST /api/v1/account/settings` (session-token scoped `wantsNews` update).
+- Improved admin web login behavior:
+  - login/session failure now surfaces explicit error text.
+- Smoke harness now blocks placeholder credentials (`YOUR_ADMIN_USER` / `YOUR_ADMIN_PASS`) with clear failure output.
+- App Multiplayer settings UX updated:
+  - hide email/password login fields when already logged in.
+  - show compact logged-in header: `Account: <display_name> (<email>)`.
+  - keep verified indicator only inside Account Settings sheet (not main settings pane).
+  - expose latest debug verification code in Validation Report section.
+- Added online-character ownership protection:
+  - online characters store owner account ID at creation/sign-in reconciliation.
+  - mismatch warning shown and surfaced when loading/using a character under wrong account.

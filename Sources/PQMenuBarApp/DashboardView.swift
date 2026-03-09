@@ -482,6 +482,10 @@ struct DashboardView: View {
                     GroupBox("Character Multiplayer Mode") {
                         VStack(alignment: .leading, spacing: 8) {
                             if let target {
+                                if let mismatch = appState.multiplayerOwnershipMismatchMessage(for: target) {
+                                    Text(mismatch)
+                                        .foregroundStyle(.red)
+                                }
                                 HStack {
                                     Text("Character:")
                                     Text(target.name).foregroundStyle(.secondary)
@@ -684,46 +688,36 @@ struct DashboardView: View {
 
                 GroupBox("Multiplayer Account") {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            TextField("Email", text: $multiplayerSignInEmailDraft)
-                            SecureField("Password", text: $multiplayerSignInPasswordDraft)
-                            Button("Login") {
-                                appState.multiplayerSignIn(email: multiplayerSignInEmailDraft, password: multiplayerSignInPasswordDraft)
-                            }
-                        }
-
-                        HStack {
-                            Text("Don't have an account yet?")
-                                .foregroundStyle(.secondary)
-                            Button("Create Account") {
-                                multiplayerEmailDraft = multiplayerSignInEmailDraft
-                                showCreateAccountSheet = true
-                            }
-                        }
-
                         let hasActiveSession = appState.multiplayerSession?.isExpired == false
-                        if let account = appState.multiplayerAccount {
-                            if hasActiveSession && account.verified {
-                                Label("Verified", systemImage: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            } else if hasActiveSession && !account.verified {
-                                Label("Not verified", systemImage: "xmark.circle.fill")
-                                    .foregroundStyle(.red)
-                            } else {
-                                Text("Not logged in.")
-                                    .foregroundStyle(.secondary)
-                            }
+                        if hasActiveSession, let account = appState.multiplayerAccount {
+                            Text("Account: \(account.publicName) (\(account.email))")
+                                .foregroundStyle(.secondary)
                             HStack {
                                 Button("Account Settings") {
                                     showAccountSettingsSheet = true
                                 }
-                                .disabled(appState.multiplayerAccount == nil)
-                                Button("Sign Out") {
+                                Button("Log Out") {
                                     appState.multiplayerSignOutLocalSession()
                                 }
-                                .disabled(appState.multiplayerSession == nil)
                             }
                         } else {
+                            HStack {
+                                TextField("Email", text: $multiplayerSignInEmailDraft)
+                                SecureField("Password", text: $multiplayerSignInPasswordDraft)
+                                Button("Login") {
+                                    appState.multiplayerSignIn(email: multiplayerSignInEmailDraft, password: multiplayerSignInPasswordDraft)
+                                }
+                            }
+
+                            HStack {
+                                Text("Don't have an account yet?")
+                                    .foregroundStyle(.secondary)
+                                Button("Create Account") {
+                                    multiplayerEmailDraft = multiplayerSignInEmailDraft
+                                    showCreateAccountSheet = true
+                                }
+                            }
+
                             HStack {
                                 Button("Account Settings") {
                                     showAccountSettingsSheet = true
@@ -829,6 +823,12 @@ struct DashboardView: View {
                         Divider()
                         Text("Validation Report")
                             .font(.subheadline.weight(.semibold))
+                        if let debugCode = appState.lastMultiplayerDebugVerificationCode, let email = appState.multiplayerAccount?.email {
+                            Text("Debug MP verification code for \(email): \(debugCode)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
                         ScrollView {
                             Text(appState.dataValidationReport)
                                 .font(.system(.caption, design: .monospaced))
