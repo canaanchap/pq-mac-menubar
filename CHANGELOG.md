@@ -125,3 +125,36 @@
   - server-side guild APIs enforce character/account ownership
   - app-side warning/eligibility handling for mismatched account ownership.
 - Smoke harness extended to exercise online character creation + guild create/profile/logs.
+
+### Added
+- Multiplayer guild config system (server-managed dictionaries):
+  - `GET /api/v1/guilds/config`
+  - `GET/POST /api/v1/admin/config/alignment*`
+  - `GET/POST /api/v1/admin/config/type*`
+- Character-to-guild status API:
+  - `POST /api/v1/characters/guild-status`
+- Guild abandonment workflow:
+  - chief-only leave when sole member now transitions guild to `pending_abandonment`
+  - admin approval endpoints:
+    - `GET /api/v1/admin/guilds/pending-abandonment`
+    - `POST /api/v1/admin/guilds/approve-abandonment`
+- Guild create now accepts governance fields:
+  - `majorityType`, `majorityBasis`, `quorumEnabled`, `quorumPercent`, `noConfidenceEnabled`
+
+### Changed
+- API bootstrap now auto-ensures multiplayer config tables/columns and default dictionary seeds.
+- Guild list/join now enforces guild status (`active` only).
+- Guild profile payload now includes:
+  - `status`, abandonment timestamps, and full governance rule snapshot.
+- Admin panel now includes:
+  - alignment/type dictionary editing
+  - pending-abandonment queue + approve action
+- App Multiplayer tab reworked:
+  - `Guildhall` section with auto profile load from selected guild.
+  - character-scoped guild lookup to prevent stale cross-character guild display.
+  - governance fields wired into guild creation UI + API call.
+  - added placeholder idle guild progress section and beta toggles for governance/procedural panels.
+- Smoke harness expanded to include:
+  - guild config endpoint
+  - character guild-status
+  - chief abandonment request + admin approval flow

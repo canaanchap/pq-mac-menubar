@@ -192,6 +192,110 @@ function ensure_default_realm_seeded(): void {
     $insert->execute([$realmId, $realmName, 'active', 1, $now, $now]);
 }
 
+function ensure_multiplayer_config_seeded(): void {
+    static $initialized = false;
+    if ($initialized) {
+        return;
+    }
+
+    $pdo = db();
+    $now = now_utc();
+
+    $pdo->exec('
+        CREATE TABLE IF NOT EXISTS guild_alignment_options (
+          id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+          code VARCHAR(40) NOT NULL UNIQUE,
+          display_name VARCHAR(80) NOT NULL,
+          alignment_value INT NOT NULL DEFAULT 0,
+          include_flag TINYINT(1) NOT NULL DEFAULT 1,
+          sort_order INT NOT NULL DEFAULT 0,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL
+        )
+    ');
+    $pdo->exec('
+        CREATE TABLE IF NOT EXISTS guild_type_options (
+          id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+          code VARCHAR(40) NOT NULL UNIQUE,
+          display_name VARCHAR(80) NOT NULL,
+          include_flag TINYINT(1) NOT NULL DEFAULT 1,
+          sort_order INT NOT NULL DEFAULT 0,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL
+        )
+    ');
+
+    if (!table_has_column($pdo, 'guilds', 'status')) {
+        $pdo->exec("ALTER TABLE guilds ADD COLUMN status ENUM('active','pending_abandonment','abandoned') NOT NULL DEFAULT 'active' AFTER immutable_on_membership");
+    }
+    if (!table_has_column($pdo, 'guilds', 'abandonment_requested_at')) {
+        $pdo->exec('ALTER TABLE guilds ADD COLUMN abandonment_requested_at DATETIME DEFAULT NULL AFTER status');
+    }
+    if (!table_has_column($pdo, 'guilds', 'abandonment_requested_by')) {
+        $pdo->exec('ALTER TABLE guilds ADD COLUMN abandonment_requested_by BIGINT UNSIGNED DEFAULT NULL AFTER abandonment_requested_at');
+    }
+    if (!table_has_column($pdo, 'guilds', 'abandonment_approved_at')) {
+        $pdo->exec('ALTER TABLE guilds ADD COLUMN abandonment_approved_at DATETIME DEFAULT NULL AFTER abandonment_requested_by');
+    }
+    if (!table_has_column($pdo, 'guild_rules', 'quorum_percent')) {
+        $pdo->exec('ALTER TABLE guild_rules ADD COLUMN quorum_percent TINYINT UNSIGNED DEFAULT NULL AFTER quorum_enabled');
+    }
+
+    $seedAlignments = [
+        ['Neutral', 'Neutral', 0, 10],
+        ['Good', 'Good', 1, 20],
+        ['Evil', 'Evil', -1, 30],
+    ];
+    foreach ($seedAlignments as [$code, $display, $value, $sort]) {
+        $check = $pdo->prepare('SELECT id FROM guild_alignment_options WHERE code = ? LIMIT 1');
+        $check->execute([$code]);
+        if ($check->fetch()) {
+            continue;
+        }
+        $insert = $pdo->prepare('
+            INSERT INTO guild_alignment_options (code, display_name, alignment_value, include_flag, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, 1, ?, ?, ?)
+        ');
+        $insert->execute([$code, $display, $value, $sort, $now, $now]);
+    }
+
+    $seedTypes = [
+        ['Guild', 'Guild', 10],
+        ['Clan', 'Clan', 20],
+        ['Faction', 'Faction', 30],
+        ['Band', 'Band', 40],
+    ];
+    foreach ($seedTypes as [$code, $display, $sort]) {
+        $check = $pdo->prepare('SELECT id FROM guild_type_options WHERE code = ? LIMIT 1');
+        $check->execute([$code]);
+        if ($check->fetch()) {
+            continue;
+        }
+        $insert = $pdo->prepare('
+            INSERT INTO guild_type_options (code, display_name, include_flag, sort_order, created_at, updated_at)
+            VALUES (?, ?, 1, ?, ?, ?)
+        ');
+        $insert->execute([$code, $display, $sort, $now, $now]);
+    }
+
+    $initialized = true;
+}
+
+function table_has_column(PDO $pdo, string $table, string $column): bool {
+    $dbName = env_value('PQ_DB_NAME', '');
+    if ($dbName === '') {
+        return false;
+    }
+    $stmt = $pdo->prepare('
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
+        LIMIT 1
+    ');
+    $stmt->execute([$dbName, $table, $column]);
+    return (bool)$stmt->fetchColumn();
+}
+
 function account_session_from_token(string $token): ?array {
     $pdo = db();
     $stmt = $pdo->prepare('

@@ -136,6 +136,8 @@ final class AppState: ObservableObject {
     @Published var multiplayerGuildDirectory: [MultiplayerGuildSummary] = []
     @Published var multiplayerGuildProfile: MultiplayerGuildProfile?
     @Published var multiplayerGuildLogs: [MultiplayerGuildLogEntry] = []
+    @Published var multiplayerAlignmentOptions: [MultiplayerGuildAlignmentOption] = []
+    @Published var multiplayerTypeOptions: [MultiplayerGuildTypeOption] = []
     @Published var multiplayerAPIBaseURL: String {
         didSet {
             UserDefaults.standard.set(multiplayerAPIBaseURL, forKey: Self.multiplayerAPIBaseURLDefaultsKey)
@@ -912,9 +914,39 @@ final class AppState: ObservableObject {
 
     func refreshMultiplayerRealmAndGuildState() {
         Task {
+            await fetchGuildConfig()
             await fetchRealmsFromServer()
             await fetchGuildDirectory()
-            await fetchCurrentGuildProfileIfKnown()
+            await refreshGuildProfileForCurrentCharacter()
+        }
+    }
+
+    func fetchGuildConfig() async {
+        guard multiplayerSession != nil else { return }
+        do {
+            let json = try await multiplayerGET(path: "/api/v1/guilds/config")
+            let data = try extractData(json)
+            let alignRaw = data["alignments"] as? [[String: Any]] ?? []
+            let typeRaw = data["types"] as? [[String: Any]] ?? []
+            multiplayerAlignmentOptions = alignRaw.map {
+                MultiplayerGuildAlignmentOption(
+                    code: stringFrom($0["code"]),
+                    displayName: stringFrom($0["displayName"]),
+                    alignmentValue: ($0["alignmentValue"] as? Int) ?? 0,
+                    include: ($0["include"] as? Bool) ?? true,
+                    sortOrder: ($0["sortOrder"] as? Int) ?? 0
+                )
+            }
+            multiplayerTypeOptions = typeRaw.map {
+                MultiplayerGuildTypeOption(
+                    code: stringFrom($0["code"]),
+                    displayName: stringFrom($0["displayName"]),
+                    include: ($0["include"] as? Bool) ?? true,
+                    sortOrder: ($0["sortOrder"] as? Int) ?? 0
+                )
+            }
+        } catch {
+            flash("Guild config failed: \(error.localizedDescription)")
         }
     }
 
@@ -1007,7 +1039,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    func createGuild(formalName: String, shortTag: String, alignmentCode: String, typeCode: String, motto: String) {
+    func createGuild(
+        formalName: String,
+        shortTag: String,
+        alignmentCode: String,
+        typeCode: String,
+        motto: String,
+        majorityType: String,
+        majorityBasis: String,
+        quorumEnabled: Bool,
+        quorumPercent: Int?,
+        noConfidenceEnabled: Bool
+    ) {
         guard let character = currentContextCharacter else {
             flash("No character selected.")
             return
@@ -1024,6 +1067,11 @@ final class AppState: ObservableObject {
                     "alignmentCode": alignmentCode,
                     "typeCode": typeCode,
                     "motto": motto,
+                    "majorityType": majorityType,
+                    "majorityBasis": majorityBasis,
+                    "quorumEnabled": quorumEnabled,
+                    "quorumPercent": quorumPercent as Any,
+                    "noConfidenceEnabled": noConfidenceEnabled,
                 ]
                 let json = try await multiplayerPOST(path: "/api/v1/guilds/create", payload: payload)
                 let data = try extractData(json)
@@ -1079,10 +1127,15 @@ final class AppState: ObservableObject {
                     "serverCharacterId": serverCharacterId,
                     "guildId": profile.guildId,
                 ]
-                _ = try extractData(try await multiplayerPOST(path: "/api/v1/guilds/leave", payload: payload))
-                flash("Left guild.")
-                multiplayerGuildProfile = nil
-                multiplayerGuildLogs = []
+                let result = try extractData(try await multiplayerPOST(path: "/api/v1/guilds/leave", payload: payload))
+                if (result["pendingAbandonment"] as? Bool) == true {
+                    flash("Guild flagged as pending abandonment (awaiting admin approval).")
+                    await fetchGuildProfile(guildId: profile.guildId)
+                } else {
+                    flash("Left guild.")
+                    multiplayerGuildProfile = nil
+                    multiplayerGuildLogs = []
+                }
                 await fetchGuildDirectory()
             } catch {
                 flash("Leave guild failed: \(error.localizedDescription)")
@@ -1112,6 +1165,14 @@ final class AppState: ObservableObject {
                     joinedAt: Self.parseISO8601Date(stringFrom(m["joinedAt"]))
                 )
             }
+            let rulesRaw = g["rules"] as? [String: Any] ?? [:]
+            let rules = MultiplayerGuildProfile.Rules(
+                majorityType: stringFrom(rulesRaw["majorityType"]),
+                majorityBasis: stringFrom(rulesRaw["majorityBasis"]),
+                quorumEnabled: (rulesRaw["quorumEnabled"] as? Bool) ?? false,
+                quorumPercent: rulesRaw["quorumPercent"] as? Int,
+                noConfidenceEnabled: (rulesRaw["noConfidenceEnabled"] as? Bool) ?? false
+            )
             let profile = MultiplayerGuildProfile(
                 guildId: stringFrom(g["guildId"]),
                 formalName: stringFrom(g["formalName"]),
@@ -1123,8 +1184,12 @@ final class AppState: ObservableObject {
                 chiefCharacterId: stringFrom(g["chiefCharacterId"]),
                 chiefName: stringFrom(g["chiefName"]),
                 immutableOnMembership: (g["immutableOnMembership"] as? Bool) ?? true,
+                status: stringFrom(g["status"]),
+                abandonmentRequestedAt: Self.parseISO8601Date(stringFrom(g["abandonmentRequestedAt"])),
+                abandonmentApprovedAt: Self.parseISO8601Date(stringFrom(g["abandonmentApprovedAt"])),
                 memberCount: (g["memberCount"] as? Int) ?? members.count,
-                members: members
+                members: members,
+                rules: rules
             )
             multiplayerGuildProfile = profile
             multiplayerGuildCache = MultiplayerGuildCache(
@@ -1163,9 +1228,36 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func fetchCurrentGuildProfileIfKnown() async {
-        if let id = multiplayerGuildCache?.guildId, !id.isEmpty {
-            await fetchGuildProfile(guildId: id)
+    func refreshGuildProfileForCurrentCharacter() async {
+        guard let character = currentContextCharacter, character.isOnlineMultiplayer else {
+            multiplayerGuildProfile = nil
+            multiplayerGuildLogs = []
+            return
+        }
+        guard let serverCharacterId = await ensureOnlineCharacterRegistered(character) else {
+            multiplayerGuildProfile = nil
+            multiplayerGuildLogs = []
+            return
+        }
+        guard let session = multiplayerSession else { return }
+        do {
+            let payload: [String: Any] = [
+                "sessionToken": session.sessionToken,
+                "serverCharacterId": serverCharacterId,
+            ]
+            let json = try await multiplayerPOST(path: "/api/v1/characters/guild-status", payload: payload)
+            let data = try extractData(json)
+            let guildId = stringFrom(data["guildId"])
+            if guildId.isEmpty {
+                multiplayerGuildProfile = nil
+                multiplayerGuildLogs = []
+                try? multiplayerStore.saveGuildCache(nil)
+                multiplayerGuildCache = nil
+                return
+            }
+            await fetchGuildProfile(guildId: guildId)
+        } catch {
+            flash("Character guild status failed: \(error.localizedDescription)")
         }
     }
 

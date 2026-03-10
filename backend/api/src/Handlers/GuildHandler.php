@@ -2,6 +2,41 @@
 declare(strict_types=1);
 
 final class GuildHandler {
+    public static function guildConfig(): array {
+        $pdo = db();
+
+        $aStmt = $pdo->query('
+            SELECT code, display_name, alignment_value, include_flag, sort_order
+            FROM guild_alignment_options
+            ORDER BY sort_order ASC, display_name ASC
+        ');
+        $alignments = array_map(static function (array $row): array {
+            return [
+                'code' => (string)$row['code'],
+                'displayName' => (string)$row['display_name'],
+                'alignmentValue' => (int)$row['alignment_value'],
+                'include' => ((int)$row['include_flag']) === 1,
+                'sortOrder' => (int)$row['sort_order'],
+            ];
+        }, $aStmt->fetchAll() ?: []);
+
+        $tStmt = $pdo->query('
+            SELECT code, display_name, include_flag, sort_order
+            FROM guild_type_options
+            ORDER BY sort_order ASC, display_name ASC
+        ');
+        $types = array_map(static function (array $row): array {
+            return [
+                'code' => (string)$row['code'],
+                'displayName' => (string)$row['display_name'],
+                'include' => ((int)$row['include_flag']) === 1,
+                'sortOrder' => (int)$row['sort_order'],
+            ];
+        }, $tStmt->fetchAll() ?: []);
+
+        return ['status' => 200, 'body' => json_success(['alignments' => $alignments, 'types' => $types])];
+    }
+
     public static function createOnlineCharacter(array $body): array {
         $auth = require_account_session_from_body($body);
         if (isset($auth['error'])) {
@@ -91,7 +126,7 @@ final class GuildHandler {
             FROM guilds g
             LEFT JOIN guild_members gm ON gm.guild_id = g.id AND gm.status = "active"
             JOIN realms r ON r.id = g.realm_id
-            WHERE r.realm_uid = ?
+            WHERE r.realm_uid = ? AND g.status = "active"
             GROUP BY g.id
             ORDER BY g.created_at DESC
             LIMIT 250
@@ -125,11 +160,34 @@ final class GuildHandler {
         $typeCode = trim((string)($body['typeCode'] ?? 'Guild'));
         $motto = trim((string)($body['motto'] ?? ''));
 
+        $majorityType = trim((string)($body['majorityType'] ?? 'functional_50'));
+        $majorityBasis = trim((string)($body['majorityBasis'] ?? 'present'));
+        $quorumEnabled = (bool)($body['quorumEnabled'] ?? false);
+        $quorumPercentRaw = (int)($body['quorumPercent'] ?? 0);
+        $quorumPercent = $quorumEnabled ? max(1, min(100, $quorumPercentRaw)) : null;
+        $noConfidenceEnabled = (bool)($body['noConfidenceEnabled'] ?? false);
+
         if ($formalName === '' || $shortTag === '') {
             return json_error('VALIDATION_GUILD_FIELDS', 'formalName and shortTag are required.', [], 422);
         }
+        if (!in_array($majorityType, ['functional_50', 'three_fifths_60', 'two_thirds_66_7', 'three_fourths_75'], true)) {
+            return json_error('VALIDATION_MAJORITY_TYPE', 'Invalid majorityType.', [], 422);
+        }
+        if (!in_array($majorityBasis, ['absolute', 'present'], true)) {
+            return json_error('VALIDATION_MAJORITY_BASIS', 'Invalid majorityBasis.', [], 422);
+        }
+        if ($quorumEnabled && ($quorumPercent === null || $quorumPercent < 1 || $quorumPercent > 100)) {
+            return json_error('VALIDATION_QUORUM', 'quorumPercent must be 1..100 when quorum is enabled.', [], 422);
+        }
 
         $pdo = db();
+        if (!self::isAllowedAlignment($pdo, $alignmentCode)) {
+            return json_error('VALIDATION_ALIGNMENT', 'alignmentCode is not enabled.', [], 422);
+        }
+        if (!self::isAllowedType($pdo, $typeCode)) {
+            return json_error('VALIDATION_TYPE', 'typeCode is not enabled.', [], 422);
+        }
+
         $chiefCountStmt = $pdo->prepare('
             SELECT COUNT(*) c
             FROM guild_members gm
@@ -147,8 +205,8 @@ final class GuildHandler {
         try {
             $pdo->beginTransaction();
             $insertGuild = $pdo->prepare('
-                INSERT INTO guilds (guild_uid, realm_id, formal_name, short_tag, alignment_code, type_code, motto, chief_character_id, immutable_on_membership, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                INSERT INTO guilds (guild_uid, realm_id, formal_name, short_tag, alignment_code, type_code, motto, chief_character_id, immutable_on_membership, status, abandonment_requested_at, abandonment_requested_by, abandonment_approved_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, "active", NULL, NULL, NULL, ?, ?)
             ');
             $insertGuild->execute([
                 $guildUid,
@@ -172,19 +230,30 @@ final class GuildHandler {
 
             $insertRules = $pdo->prepare('
                 INSERT INTO guild_rules (guild_id, majority_type, majority_basis, quorum_enabled, quorum_percent, no_confidence_enabled, created_at, updated_at)
-                VALUES (?, "functional_50", "present", 0, NULL, 0, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ');
-            $insertRules->execute([$guildId, $now, $now]);
+            $insertRules->execute([
+                $guildId,
+                $majorityType,
+                $majorityBasis,
+                $quorumEnabled ? 1 : 0,
+                $quorumPercent,
+                $noConfidenceEnabled ? 1 : 0,
+                $now,
+                $now,
+            ]);
 
             $insertLog = $pdo->prepare('
                 INSERT INTO guild_logs (guild_id, log_type, message, created_at)
                 VALUES (?, "system", ?, ?)
             ');
-            $insertLog->execute([$guildId, "Guild founded by " . (string)$character['name'] . ".", $now]);
+            $insertLog->execute([$guildId, 'Guild founded by ' . (string)$character['name'] . '.', $now]);
 
             $pdo->commit();
         } catch (Throwable $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             return json_error('GUILD_CREATE_FAILED', 'Failed to create guild.', ['reason' => $e->getMessage()], 409);
         }
 
@@ -210,11 +279,14 @@ final class GuildHandler {
         }
 
         $pdo = db();
-        $guildStmt = $pdo->prepare('SELECT id, realm_id FROM guilds WHERE guild_uid = ? LIMIT 1');
+        $guildStmt = $pdo->prepare('SELECT id, realm_id, status FROM guilds WHERE guild_uid = ? LIMIT 1');
         $guildStmt->execute([$guildUid]);
         $guild = $guildStmt->fetch();
         if (!$guild) {
             return json_error('GUILD_NOT_FOUND', 'Guild not found.', [], 404);
+        }
+        if ((string)$guild['status'] !== 'active') {
+            return json_error('GUILD_NOT_ACTIVE', 'Guild is not active.', ['status' => (string)$guild['status']], 409);
         }
         if ((int)$guild['realm_id'] !== (int)$character['realm_id']) {
             return json_error('REALM_MISMATCH', 'Character and guild must be in same realm.', [], 409);
@@ -243,7 +315,7 @@ final class GuildHandler {
         }
 
         $log = $pdo->prepare('INSERT INTO guild_logs (guild_id, log_type, message, created_at) VALUES (?, "system", ?, ?)');
-        $log->execute([(int)$guild['id'], (string)$character['name'] . " joined the guild.", $now]);
+        $log->execute([(int)$guild['id'], (string)$character['name'] . ' joined the guild.', $now]);
 
         return ['status' => 200, 'body' => json_success(['joined' => true, 'guildId' => $guildUid])];
     }
@@ -260,7 +332,7 @@ final class GuildHandler {
         }
 
         $pdo = db();
-        $guildStmt = $pdo->prepare('SELECT id FROM guilds WHERE guild_uid = ? LIMIT 1');
+        $guildStmt = $pdo->prepare('SELECT id, status FROM guilds WHERE guild_uid = ? LIMIT 1');
         $guildStmt->execute([$guildUid]);
         $guild = $guildStmt->fetch();
         if (!$guild) {
@@ -278,15 +350,31 @@ final class GuildHandler {
         if (!$member || $member['status'] !== 'active') {
             return json_error('NOT_MEMBER', 'Character is not an active member of this guild.', [], 409);
         }
+
         if ($member['role'] === 'chief') {
-            return json_error('CHIEF_CANNOT_LEAVE', 'Chief cannot leave guild in v1.', [], 409);
+            $activeCountStmt = $pdo->prepare('SELECT COUNT(*) c FROM guild_members WHERE guild_id = ? AND status = "active"');
+            $activeCountStmt->execute([(int)$guild['id']]);
+            $activeCount = (int)($activeCountStmt->fetch()['c'] ?? 0);
+            if ($activeCount > 1) {
+                return json_error('CHIEF_CANNOT_LEAVE_WITH_MEMBERS', 'Chief cannot leave while other active members remain.', [], 409);
+            }
+            $now = now_utc();
+            $request = $pdo->prepare('
+                UPDATE guilds
+                SET status = "pending_abandonment", abandonment_requested_at = ?, abandonment_requested_by = ?, abandonment_approved_at = NULL, updated_at = ?
+                WHERE id = ?
+            ');
+            $request->execute([$now, (int)$character['id'], $now, (int)$guild['id']]);
+            $log = $pdo->prepare('INSERT INTO guild_logs (guild_id, log_type, message, created_at) VALUES (?, "system", ?, ?)');
+            $log->execute([(int)$guild['id'], (string)$character['name'] . ' requested guild abandonment.', $now]);
+            return ['status' => 200, 'body' => json_success(['pendingAbandonment' => true, 'guildId' => $guildUid])];
         }
 
         $now = now_utc();
         $leave = $pdo->prepare('UPDATE guild_members SET status = "left", left_at = ? WHERE id = ?');
         $leave->execute([$now, (int)$member['id']]);
         $log = $pdo->prepare('INSERT INTO guild_logs (guild_id, log_type, message, created_at) VALUES (?, "system", ?, ?)');
-        $log->execute([(int)$guild['id'], (string)$character['name'] . " left the guild.", $now]);
+        $log->execute([(int)$guild['id'], (string)$character['name'] . ' left the guild.', $now]);
 
         return ['status' => 200, 'body' => json_success(['left' => true, 'guildId' => $guildUid])];
     }
@@ -295,6 +383,7 @@ final class GuildHandler {
         $pdo = db();
         $stmt = $pdo->prepare('
             SELECT g.id, g.guild_uid, g.formal_name, g.short_tag, g.alignment_code, g.type_code, g.motto, g.immutable_on_membership,
+                   g.status, g.abandonment_requested_at, g.abandonment_approved_at,
                    r.realm_uid, c.character_uid AS chief_character_uid, c.name AS chief_name
             FROM guilds g
             JOIN realms r ON r.id = g.realm_id
@@ -327,6 +416,21 @@ final class GuildHandler {
             ];
         }, $membersRows);
 
+        $rulesStmt = $pdo->prepare('
+            SELECT majority_type, majority_basis, quorum_enabled, quorum_percent, no_confidence_enabled
+            FROM guild_rules
+            WHERE guild_id = ?
+            LIMIT 1
+        ');
+        $rulesStmt->execute([(int)$guild['id']]);
+        $rules = $rulesStmt->fetch() ?: [
+            'majority_type' => 'functional_50',
+            'majority_basis' => 'present',
+            'quorum_enabled' => 0,
+            'quorum_percent' => null,
+            'no_confidence_enabled' => 0,
+        ];
+
         return [
             'status' => 200,
             'body' => json_success([
@@ -341,8 +445,18 @@ final class GuildHandler {
                     'chiefCharacterId' => (string)$guild['chief_character_uid'],
                     'chiefName' => (string)$guild['chief_name'],
                     'immutableOnMembership' => ((int)$guild['immutable_on_membership']) === 1,
+                    'status' => (string)$guild['status'],
+                    'abandonmentRequestedAt' => $guild['abandonment_requested_at'] ? gmdate('c', strtotime((string)$guild['abandonment_requested_at'])) : null,
+                    'abandonmentApprovedAt' => $guild['abandonment_approved_at'] ? gmdate('c', strtotime((string)$guild['abandonment_approved_at'])) : null,
                     'memberCount' => count($members),
                     'members' => $members,
+                    'rules' => [
+                        'majorityType' => (string)$rules['majority_type'],
+                        'majorityBasis' => (string)$rules['majority_basis'],
+                        'quorumEnabled' => ((int)$rules['quorum_enabled']) === 1,
+                        'quorumPercent' => $rules['quorum_percent'] === null ? null : (int)$rules['quorum_percent'],
+                        'noConfidenceEnabled' => ((int)$rules['no_confidence_enabled']) === 1,
+                    ],
                 ],
             ]),
         ];
@@ -375,6 +489,29 @@ final class GuildHandler {
         return ['status' => 200, 'body' => json_success(['logs' => $logs])];
     }
 
+    public static function characterGuildStatus(array $body): array {
+        $characterRow = self::requireOwnedCharacterFromBody($body);
+        if (isset($characterRow['error'])) {
+            return $characterRow['error'];
+        }
+        $character = $characterRow['character'];
+        $pdo = db();
+        $stmt = $pdo->prepare('
+            SELECT g.guild_uid, g.status
+            FROM guild_members gm
+            JOIN guilds g ON g.id = gm.guild_id
+            WHERE gm.character_id = ? AND gm.status = "active"
+            ORDER BY gm.joined_at DESC
+            LIMIT 1
+        ');
+        $stmt->execute([(int)$character['id']]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return ['status' => 200, 'body' => json_success(['guildId' => null, 'guildStatus' => null])];
+        }
+        return ['status' => 200, 'body' => json_success(['guildId' => (string)$row['guild_uid'], 'guildStatus' => (string)$row['status']])];
+    }
+
     private static function requireOwnedCharacterFromBody(array $body): array {
         $auth = require_account_session_from_body($body);
         if (isset($auth['error'])) {
@@ -401,5 +538,17 @@ final class GuildHandler {
             return ['error' => json_error('CHARACTER_ACCOUNT_MISMATCH', 'Character belongs to another account.', [], 403)];
         }
         return ['character' => $character, 'session' => $session];
+    }
+
+    private static function isAllowedAlignment(PDO $pdo, string $code): bool {
+        $stmt = $pdo->prepare('SELECT 1 FROM guild_alignment_options WHERE code = ? AND include_flag = 1 LIMIT 1');
+        $stmt->execute([$code]);
+        return (bool)$stmt->fetchColumn();
+    }
+
+    private static function isAllowedType(PDO $pdo, string $code): bool {
+        $stmt = $pdo->prepare('SELECT 1 FROM guild_type_options WHERE code = ? AND include_flag = 1 LIMIT 1');
+        $stmt->execute([$code]);
+        return (bool)$stmt->fetchColumn();
     }
 }

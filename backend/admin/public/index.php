@@ -127,6 +127,26 @@ $apiBase = 'https://api.progressquest.me/api/v1';
         </div>
 
         <div class="card">
+          <h2>Pending Abandonment</h2>
+          <div class="row2">
+            <label>
+              Guild ID
+              <input id="abandonGuildId" placeholder="C1..." />
+            </label>
+            <button id="approveAbandonBtn" class="primary">Approve</button>
+          </div>
+          <button id="refreshAbandonBtn" style="margin-top:8px;">Refresh</button>
+          <div id="abandonStatus" class="status"></div>
+          <div style="max-height: 180px; overflow:auto; margin-top:8px;">
+            <table>
+              <thead>
+                <tr><th>Guild</th><th>Status</th><th>Requested By</th></tr>
+              </thead>
+              <tbody id="abandonBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
           <h2>Characters (Placeholder)</h2>
           <p class="muted">Upcoming: searchable online-character records, ownership links, and moderation tools.</p>
         </div>
@@ -143,8 +163,35 @@ $apiBase = 'https://api.progressquest.me/api/v1';
           <p class="muted">Upcoming: anti-cheat triage queue and review workflow.</p>
         </div>
         <div class="card">
-          <h2>Config / Dictionaries (Placeholder)</h2>
-          <p class="muted">Upcoming: alignments, guild types, and procedural term banks.</p>
+          <h2>Config: Alignment</h2>
+          <div class="row">
+            <label>Code<input id="alignmentCode" placeholder="Neutral"></label>
+            <label>Name<input id="alignmentName" placeholder="Neutral"></label>
+            <button id="upsertAlignmentBtn" class="primary">Save</button>
+          </div>
+          <div class="row2" style="margin-top:8px;">
+            <label>Value<input id="alignmentValue" type="number" value="0"></label>
+            <label>Sort<input id="alignmentSort" type="number" value="10"></label>
+          </div>
+          <label style="display:block; margin-top:8px;"><input id="alignmentInclude" type="checkbox" checked> Include</label>
+          <button id="refreshAlignmentBtn" style="margin-top:8px;">Refresh</button>
+          <div id="alignmentStatus" class="status"></div>
+          <div style="max-height:120px; overflow:auto; margin-top:8px;"><table><tbody id="alignmentBody"></tbody></table></div>
+        </div>
+        <div class="card">
+          <h2>Config: Guild Types</h2>
+          <div class="row">
+            <label>Code<input id="typeCode" placeholder="Guild"></label>
+            <label>Name<input id="typeName" placeholder="Guild"></label>
+            <button id="upsertTypeBtn" class="primary">Save</button>
+          </div>
+          <div class="row2" style="margin-top:8px;">
+            <label>Sort<input id="typeSort" type="number" value="10"></label>
+            <label><input id="typeInclude" type="checkbox" checked> Include</label>
+          </div>
+          <button id="refreshTypeBtn" style="margin-top:8px;">Refresh</button>
+          <div id="typeStatus" class="status"></div>
+          <div style="max-height:120px; overflow:auto; margin-top:8px;"><table><tbody id="typeBody"></tbody></table></div>
         </div>
         <div class="card">
           <h2>Scheduler / Timers (Placeholder)</h2>
@@ -196,7 +243,7 @@ $apiBase = 'https://api.progressquest.me/api/v1';
         document.getElementById("adminPanel").classList.remove("hidden");
         document.getElementById("sessionBadge").textContent = `Admin: ${data.username}`;
         setStatus("loginStatus", "", true);
-        await Promise.all([refreshAccounts(), refreshRealms()]);
+        await Promise.all([refreshAccounts(), refreshRealms(), refreshAlignments(), refreshTypes(), refreshPendingAbandonment()]);
       } catch (e) {
         setToken("");
         document.getElementById("loginCard").classList.remove("hidden");
@@ -301,11 +348,129 @@ $apiBase = 'https://api.progressquest.me/api/v1';
       }
     }
 
+    async function refreshAlignments() {
+      try {
+        const data = await api("/admin/config/alignment", { method: "GET", headers: headers(true) });
+        const body = document.getElementById("alignmentBody");
+        body.innerHTML = "";
+        for (const a of (data.alignments || [])) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${a.code}</td><td>${a.displayName}</td><td>${a.alignmentValue}</td><td>${a.include ? "yes" : "no"}</td>`;
+          body.appendChild(tr);
+        }
+        setStatus("alignmentStatus", `Loaded ${(data.alignments || []).length} alignment option(s).`, true);
+      } catch (e) {
+        setStatus("alignmentStatus", e.message, false);
+      }
+    }
+
+    async function upsertAlignment() {
+      const code = document.getElementById("alignmentCode").value.trim();
+      const displayName = document.getElementById("alignmentName").value.trim();
+      const alignmentValue = parseInt(document.getElementById("alignmentValue").value || "0", 10);
+      const sortOrder = parseInt(document.getElementById("alignmentSort").value || "0", 10);
+      const include = document.getElementById("alignmentInclude").checked;
+      if (!code || !displayName) {
+        setStatus("alignmentStatus", "code and name are required.", false);
+        return;
+      }
+      try {
+        await api("/admin/config/alignment/upsert", {
+          method: "POST",
+          headers: headers(true),
+          body: JSON.stringify({ code, displayName, alignmentValue, include, sortOrder }),
+        });
+        setStatus("alignmentStatus", `Saved ${code}.`, true);
+        await refreshAlignments();
+      } catch (e) {
+        setStatus("alignmentStatus", e.message, false);
+      }
+    }
+
+    async function refreshTypes() {
+      try {
+        const data = await api("/admin/config/type", { method: "GET", headers: headers(true) });
+        const body = document.getElementById("typeBody");
+        body.innerHTML = "";
+        for (const t of (data.types || [])) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${t.code}</td><td>${t.displayName}</td><td>${t.include ? "yes" : "no"}</td>`;
+          body.appendChild(tr);
+        }
+        setStatus("typeStatus", `Loaded ${(data.types || []).length} type option(s).`, true);
+      } catch (e) {
+        setStatus("typeStatus", e.message, false);
+      }
+    }
+
+    async function upsertType() {
+      const code = document.getElementById("typeCode").value.trim();
+      const displayName = document.getElementById("typeName").value.trim();
+      const sortOrder = parseInt(document.getElementById("typeSort").value || "0", 10);
+      const include = document.getElementById("typeInclude").checked;
+      if (!code || !displayName) {
+        setStatus("typeStatus", "code and name are required.", false);
+        return;
+      }
+      try {
+        await api("/admin/config/type/upsert", {
+          method: "POST",
+          headers: headers(true),
+          body: JSON.stringify({ code, displayName, include, sortOrder }),
+        });
+        setStatus("typeStatus", `Saved ${code}.`, true);
+        await refreshTypes();
+      } catch (e) {
+        setStatus("typeStatus", e.message, false);
+      }
+    }
+
+    async function refreshPendingAbandonment() {
+      try {
+        const data = await api("/admin/guilds/pending-abandonment", { method: "GET", headers: headers(true) });
+        const body = document.getElementById("abandonBody");
+        body.innerHTML = "";
+        for (const g of (data.guilds || [])) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${g.formalName} (${g.guildId})</td><td>${g.status}</td><td>${g.requestedBy || "-"}</td>`;
+          body.appendChild(tr);
+        }
+        setStatus("abandonStatus", `Loaded ${(data.guilds || []).length} pending guild(s).`, true);
+      } catch (e) {
+        setStatus("abandonStatus", e.message, false);
+      }
+    }
+
+    async function approveAbandonment() {
+      const guildId = document.getElementById("abandonGuildId").value.trim();
+      if (!guildId) {
+        setStatus("abandonStatus", "guildId is required.", false);
+        return;
+      }
+      try {
+        await api("/admin/guilds/approve-abandonment", {
+          method: "POST",
+          headers: headers(true),
+          body: JSON.stringify({ guildId }),
+        });
+        setStatus("abandonStatus", `Approved abandonment for ${guildId}.`, true);
+        await refreshPendingAbandonment();
+      } catch (e) {
+        setStatus("abandonStatus", e.message, false);
+      }
+    }
+
     document.getElementById("loginBtn").addEventListener("click", doLogin);
     document.getElementById("refreshAccountsBtn").addEventListener("click", refreshAccounts);
     document.getElementById("forceVerifyBtn").addEventListener("click", doForceVerify);
     document.getElementById("refreshRealmsBtn").addEventListener("click", refreshRealms);
     document.getElementById("createRealmBtn").addEventListener("click", doCreateRealm);
+    document.getElementById("refreshAlignmentBtn").addEventListener("click", refreshAlignments);
+    document.getElementById("upsertAlignmentBtn").addEventListener("click", upsertAlignment);
+    document.getElementById("refreshTypeBtn").addEventListener("click", refreshTypes);
+    document.getElementById("upsertTypeBtn").addEventListener("click", upsertType);
+    document.getElementById("refreshAbandonBtn").addEventListener("click", refreshPendingAbandonment);
+    document.getElementById("approveAbandonBtn").addEventListener("click", approveAbandonment);
 
     refreshSession();
   </script>

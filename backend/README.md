@@ -25,12 +25,24 @@ This scaffold targets:
 
 - Guild/online-character endpoints (implemented):
   - `POST /api/v1/characters/create-online`
+  - `POST /api/v1/characters/guild-status`
   - `GET /api/v1/guilds`
+  - `GET /api/v1/guilds/config`
   - `POST /api/v1/guilds/create`
   - `POST /api/v1/guilds/join`
   - `POST /api/v1/guilds/leave`
   - `GET /api/v1/guilds/:id`
   - `GET /api/v1/guilds/:id/logs`
+  - Supports governance fields on create:
+    - `majorityType`, `majorityBasis`, `quorumEnabled`, `quorumPercent`, `noConfidenceEnabled`
+
+- Admin config/governance endpoints (implemented):
+  - `GET /api/v1/admin/config/alignment`
+  - `POST /api/v1/admin/config/alignment/upsert`
+  - `GET /api/v1/admin/config/type`
+  - `POST /api/v1/admin/config/type/upsert`
+  - `GET /api/v1/admin/guilds/pending-abandonment`
+  - `POST /api/v1/admin/guilds/approve-abandonment`
 
 ## Setup
 1. Point web root for API vhost to `backend/api/public`.
@@ -52,7 +64,11 @@ This scaffold targets:
    - If env vars are unavailable on hosting, copy `backend/api/config/runtime.example.php` to
      `backend/api/config/runtime.php` and set values there.
 6. Re-run migration updates after pulling new schema changes:
-   - `backend/api/migrations/001_init.sql` now includes `admin_sessions` and indexes.
+   - `backend/api/migrations/001_init.sql` baseline.
+   - Runtime now auto-creates/patches multiplayer config tables/columns on request start:
+     - `guild_alignment_options`
+     - `guild_type_options`
+     - guild status + abandonment columns
 
 ## Admin UI
 - `backend/admin/public/index.php` provides a minimal admin shell with:
@@ -60,7 +76,9 @@ This scaffold targets:
   - Accounts list/search
   - Force verify by email
   - Realm create/list
-  - Placeholder cards for Characters, Guilds, Governance, Check-ins/Flags, Config, Scheduler
+  - Alignment/type dictionary editors
+  - Pending abandonment review + approve action
+  - Placeholder cards for Characters, Guilds, Governance, Check-ins/Flags, Scheduler
 - API target is `https://api.progressquest.me/api/v1`.
 - For browser calls from `admin.progressquest.me`, set:
   - `PQ_ADMIN_UI_ORIGIN=https://admin.progressquest.me`
@@ -71,7 +89,7 @@ This scaffold targets:
   - `ADMIN_USER`
   - `ADMIN_PASS`
 - Optional:
-  - `API_BASE`, `TEST_EMAIL`, `TEST_PASSWORD`, `TEST_PUBLIC_NAME`
+  - `API_BASE`, `TEST_EMAIL`, `TEST_PASSWORD`, `TEST_PUBLIC_NAME`, `TEST_REALM_ID`
 - Example:
 ```bash
 ADMIN_USER=admin ADMIN_PASS='secret' ./backend/scripts/smoke-admin-api.sh

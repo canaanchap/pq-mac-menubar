@@ -68,6 +68,14 @@ struct MultiplayerGuildMember: Codable, Hashable, Identifiable {
 }
 
 struct MultiplayerGuildProfile: Codable, Hashable {
+    struct Rules: Codable, Hashable {
+        var majorityType: String
+        var majorityBasis: String
+        var quorumEnabled: Bool
+        var quorumPercent: Int?
+        var noConfidenceEnabled: Bool
+    }
+
     var guildId: String
     var formalName: String
     var shortTag: String
@@ -78,8 +86,29 @@ struct MultiplayerGuildProfile: Codable, Hashable {
     var chiefCharacterId: String
     var chiefName: String
     var immutableOnMembership: Bool
+    var status: String
+    var abandonmentRequestedAt: Date?
+    var abandonmentApprovedAt: Date?
     var memberCount: Int
     var members: [MultiplayerGuildMember]
+    var rules: Rules
+}
+
+struct MultiplayerGuildAlignmentOption: Codable, Hashable, Identifiable {
+    var code: String
+    var displayName: String
+    var alignmentValue: Int
+    var include: Bool
+    var sortOrder: Int
+    var id: String { code }
+}
+
+struct MultiplayerGuildTypeOption: Codable, Hashable, Identifiable {
+    var code: String
+    var displayName: String
+    var include: Bool
+    var sortOrder: Int
+    var id: String { code }
 }
 
 struct MultiplayerGuildLogEntry: Codable, Hashable, Identifiable {

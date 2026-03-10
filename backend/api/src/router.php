@@ -19,6 +19,8 @@ function route_request(string $method, string $uri): array {
         ];
     }
 
+    ensure_multiplayer_config_seeded();
+
     if ($path === '/api/v1/realms' && $method === 'GET') {
         ensure_default_realm_seeded();
         $pdo = db();
@@ -72,6 +74,10 @@ function route_request(string $method, string $uri): array {
         return GuildHandler::listGuilds($_GET);
     }
 
+    if ($path === '/api/v1/guilds/config' && $method === 'GET') {
+        return GuildHandler::guildConfig();
+    }
+
     if ($path === '/api/v1/guilds/create' && $method === 'POST') {
         return GuildHandler::createGuild(parse_json_body());
     }
@@ -82,6 +88,10 @@ function route_request(string $method, string $uri): array {
 
     if ($path === '/api/v1/guilds/leave' && $method === 'POST') {
         return GuildHandler::leaveGuild(parse_json_body());
+    }
+
+    if ($path === '/api/v1/characters/guild-status' && $method === 'POST') {
+        return GuildHandler::characterGuildStatus(parse_json_body());
     }
 
     if ($method === 'GET' && preg_match('#^/api/v1/guilds/([^/]+)$#', $path, $m)) {
@@ -118,6 +128,30 @@ function route_request(string $method, string $uri): array {
 
     if ($path === '/api/v1/admin/realms/create' && $method === 'POST') {
         return AdminHandler::realmsCreate(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/config/alignment' && $method === 'GET') {
+        return AdminHandler::alignmentList();
+    }
+
+    if ($path === '/api/v1/admin/config/alignment/upsert' && $method === 'POST') {
+        return AdminHandler::alignmentUpsert(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/config/type' && $method === 'GET') {
+        return AdminHandler::typeList();
+    }
+
+    if ($path === '/api/v1/admin/config/type/upsert' && $method === 'POST') {
+        return AdminHandler::typeUpsert(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/guilds/pending-abandonment' && $method === 'GET') {
+        return AdminHandler::pendingAbandonmentList();
+    }
+
+    if ($path === '/api/v1/admin/guilds/approve-abandonment' && $method === 'POST') {
+        return AdminHandler::approveAbandonment(parse_json_body());
     }
 
     $stubRoutes = ['POST /api/v1/characters/checkin'];

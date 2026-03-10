@@ -72,6 +72,9 @@ curl -sS -X POST "$API_BASE/account/session" \
   -H "Content-Type: application/json" \
   -d "{\"sessionToken\":\"$SESSION_TOKEN\"}" | jq .
 
+echo "==> Guild config dictionary"
+curl -sS "$API_BASE/guilds/config" | jq .
+
 LOCAL_UUID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 echo "==> Create online character"
 CHAR_JSON="$(curl -sS -X POST "$API_BASE/characters/create-online" \
@@ -102,5 +105,25 @@ curl -sS "$API_BASE/guilds/$GUILD_ID" | jq .
 
 echo "==> Guild logs"
 curl -sS "$API_BASE/guilds/$GUILD_ID/logs" | jq .
+
+echo "==> Character guild status"
+curl -sS -X POST "$API_BASE/characters/guild-status" \
+  -H "Content-Type: application/json" \
+  -d "{\"sessionToken\":\"$SESSION_TOKEN\",\"serverCharacterId\":\"$SERVER_CHARACTER_ID\"}" | jq .
+
+echo "==> Request chief abandonment"
+curl -sS -X POST "$API_BASE/guilds/leave" \
+  -H "Content-Type: application/json" \
+  -d "{\"sessionToken\":\"$SESSION_TOKEN\",\"serverCharacterId\":\"$SERVER_CHARACTER_ID\",\"guildId\":\"$GUILD_ID\"}" | jq .
+
+echo "==> Pending abandonment list"
+curl -sS "$API_BASE/admin/guilds/pending-abandonment" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
+
+echo "==> Approve abandonment"
+curl -sS -X POST "$API_BASE/admin/guilds/approve-abandonment" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d "{\"guildId\":\"$GUILD_ID\"}" | jq .
 
 echo "==> Done."

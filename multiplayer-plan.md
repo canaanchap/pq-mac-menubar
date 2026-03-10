@@ -1,5 +1,20 @@
 # Multiplayer / Realms Plan v2 (Decision-Locked)
 
+## Status Snapshot (2026-03-10)
+- Completed:
+  - account auth/session + admin force-verify
+  - realm seed/create/list
+  - online character create
+  - guild create/join/leave/profile/logs
+  - admin shell + accounts + force verify + realms
+  - guild config dictionaries (alignment/type) with admin CRUD
+  - chief-only abandonment flow (`pending_abandonment` -> admin approval -> `abandoned`)
+  - app multiplayer tab wired to guild APIs and governance-create fields
+- In progress:
+  - richer procedural/generative guild progression loop
+  - full governance lifecycle (motions/votes/quorum state machine)
+  - anti-cheat check-in pipeline and moderation UI
+
 ## 1. Objective
 Build multiplayer/realms for PQ Menubar with:
 - all player interaction in-app (new `Multiplayer` tab),
