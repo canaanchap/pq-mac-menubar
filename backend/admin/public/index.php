@@ -10,8 +10,9 @@ $apiBase = 'https://api.progressquest.me/api/v1';
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #f5f6f8; color: #111; }
     header { padding: 14px 18px; background: #131722; color: #fff; display:flex; justify-content:space-between; align-items:center; gap:12px; }
-    main { padding: 18px; max-width: 1150px; margin: 0 auto; display:grid; gap:14px; }
+    main { padding: 18px; max-width: 1350px; margin: 0 auto; display:grid; gap:14px; }
     .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
+    .full { grid-column: 1 / -1; }
     .card { background:#fff; border:1px solid #ddd; border-radius:10px; padding:12px; }
     h2 { margin: 0 0 10px; font-size: 16px; }
     input, select, button { font: inherit; padding: 7px 8px; border-radius: 8px; border:1px solid #c8ccd4; }
@@ -58,7 +59,7 @@ $apiBase = 'https://api.progressquest.me/api/v1';
 
     <section id="adminPanel" class="hidden">
       <div class="grid">
-        <div class="card">
+        <div class="card full">
           <h2>Accounts</h2>
           <div class="row2">
             <label>
@@ -123,6 +124,31 @@ $apiBase = 'https://api.progressquest.me/api/v1';
               <tbody id="realmsBody"></tbody>
             </table>
           </div>
+        </div>
+
+        <div class="card">
+          <h2>Characters (Placeholder)</h2>
+          <p class="muted">Upcoming: searchable online-character records, ownership links, and moderation tools.</p>
+        </div>
+        <div class="card">
+          <h2>Guilds (Placeholder)</h2>
+          <p class="muted">Upcoming: guild roster browser, chief controls, and governance rule editing.</p>
+        </div>
+        <div class="card">
+          <h2>Governance (Placeholder)</h2>
+          <p class="muted">Upcoming: motions, votes, quorum snapshots, and meeting logs.</p>
+        </div>
+        <div class="card">
+          <h2>Check-ins / Flags (Placeholder)</h2>
+          <p class="muted">Upcoming: anti-cheat triage queue and review workflow.</p>
+        </div>
+        <div class="card">
+          <h2>Config / Dictionaries (Placeholder)</h2>
+          <p class="muted">Upcoming: alignments, guild types, and procedural term banks.</p>
+        </div>
+        <div class="card">
+          <h2>Scheduler / Timers (Placeholder)</h2>
+          <p class="muted">Upcoming: cron visibility and governance timing controls.</p>
         </div>
       </div>
     </section>

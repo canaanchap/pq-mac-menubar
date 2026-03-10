@@ -61,6 +61,12 @@ struct DashboardView: View {
     @State private var showCreateAccountSheet: Bool = false
     @State private var showAccountSettingsSheet: Bool = false
     @State private var showDeleteCharacterConfirm: Bool = false
+    @State private var guildFormalNameDraft: String = ""
+    @State private var guildShortTagDraft: String = ""
+    @State private var guildAlignmentDraft: String = "Neutral"
+    @State private var guildTypeDraft: String = "Guild"
+    @State private var guildMottoDraft: String = ""
+    @State private var guildSelectedToJoin: String = ""
 
     private let tickRateOptions: [Double] = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
     private var canShowMultiplayerTab: Bool {
@@ -104,6 +110,8 @@ struct DashboardView: View {
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .overview {
                 triggerOverviewReentryMaskIfNeeded()
+            } else if newTab == .multiplayer {
+                appState.refreshMultiplayerRealmAndGuildState()
             } else {
                 stopReentryMask()
             }
@@ -487,7 +495,7 @@ struct DashboardView: View {
                                     Text(target.realmId ?? "-").foregroundStyle(.secondary)
                                 }
                                 HStack {
-                                    Text("Server Character ID:")
+                                Text("Server Character ID:")
                                     Text(target.serverCharacterId ?? "-").foregroundStyle(.secondary)
                                 }
                                 HStack {
@@ -512,7 +520,7 @@ struct DashboardView: View {
                         }
                     }
 
-                    GroupBox("Realm + Guild Cache") {
+                    GroupBox("Realm") {
                         VStack(alignment: .leading, spacing: 8) {
                             if let realms = appState.multiplayerRealmCache?.realms, !realms.isEmpty {
                                 Text("Realms cached: \(realms.count)")
@@ -524,19 +532,121 @@ struct DashboardView: View {
                                 Text("No realm cache yet.")
                                     .foregroundStyle(.secondary)
                             }
+                            Button("Refresh Realm + Guild Data") {
+                                appState.refreshMultiplayerRealmAndGuildState()
+                            }
+                        }
+                    }
+
+                    GroupBox("Guild Management") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if let profile = appState.multiplayerGuildProfile {
+                                Text("Current Guild: \(profile.formalName) (\(profile.shortTag))")
+                                    .font(.headline)
+                                Text("Members: \(profile.memberCount) • Chief: \(profile.chiefName)")
+                                    .foregroundStyle(.secondary)
+                                Text("Alignment: \(profile.alignmentCode) • Type: \(profile.typeCode)")
+                                    .foregroundStyle(.secondary)
+                                if !profile.motto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text("Motto: \(profile.motto)")
+                                        .foregroundStyle(.secondary)
+                                }
+                                Button("Leave Guild") {
+                                    appState.leaveCurrentGuild()
+                                }
+                            } else {
+                                Text("No guild joined yet.")
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Create Guild")
+                                        .font(.subheadline.weight(.semibold))
+                                    HStack {
+                                        TextField("Formal Name", text: $guildFormalNameDraft)
+                                        TextField("Short Tag", text: $guildShortTagDraft)
+                                    }
+                                    HStack {
+                                        TextField("Alignment", text: $guildAlignmentDraft)
+                                        TextField("Type", text: $guildTypeDraft)
+                                    }
+                                    TextField("Motto", text: $guildMottoDraft)
+                                    Button("Create Guild") {
+                                        appState.createGuild(
+                                            formalName: guildFormalNameDraft,
+                                            shortTag: guildShortTagDraft,
+                                            alignmentCode: guildAlignmentDraft,
+                                            typeCode: guildTypeDraft,
+                                            motto: guildMottoDraft
+                                        )
+                                    }
+                                    .disabled(guildFormalNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || guildShortTagDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                            }
 
                             Divider()
-
-                            if let guild = appState.multiplayerGuildCache {
-                                Text("Guild: \(guild.formalName) (\(guild.shortTag))")
-                                Text("Members: \(guild.memberCount)")
-                                    .foregroundStyle(.secondary)
-                                Text("Alignment: \(guild.alignmentCode) • Type: \(guild.typeCode)")
+                            Text("Join Existing Guild")
+                                .font(.subheadline.weight(.semibold))
+                            if appState.multiplayerGuildDirectory.isEmpty {
+                                Text("No guilds found.")
                                     .foregroundStyle(.secondary)
                             } else {
-                                Text("No guild cache yet.")
-                                    .foregroundStyle(.secondary)
+                                Picker("Guild", selection: $guildSelectedToJoin) {
+                                    Text("-").tag("")
+                                    ForEach(appState.multiplayerGuildDirectory) { g in
+                                        Text("\(g.formalName) (\(g.shortTag)) • \(g.memberCount) members").tag(g.guildId)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                HStack {
+                                    Button("Load Profile") {
+                                        guard !guildSelectedToJoin.isEmpty else { return }
+                                        appState.loadGuildProfile(guildId: guildSelectedToJoin)
+                                    }
+                                    Button("Join Guild") {
+                                        guard !guildSelectedToJoin.isEmpty else { return }
+                                        appState.joinGuild(guildId: guildSelectedToJoin)
+                                    }
+                                    .disabled(guildSelectedToJoin.isEmpty)
+                                }
                             }
+                        }
+                    }
+
+                    GroupBox("Guild Activity Feed") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if appState.multiplayerGuildLogs.isEmpty {
+                                Text("No guild activity loaded yet.")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ScrollView {
+                                    LazyVStack(alignment: .leading, spacing: 6) {
+                                        ForEach(appState.multiplayerGuildLogs) { log in
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(log.message)
+                                                Text("\(log.type) • \(log.createdAt?.formatted(.dateTime.hour().minute()) ?? "-")")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxHeight: 160)
+                            }
+                            Text("Procedural governance log generation will be expanded in the next phase.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    GroupBox("Governance (Placeholder)") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Motions Queue")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Upcoming: create motions, vote windows, quorum checks, no-confidence workflows.")
+                                .foregroundStyle(.secondary)
+                            Text("Presence")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Upcoming: present/away toggle, expiry timer, and active-voter computation.")
+                                .foregroundStyle(.secondary)
                         }
                     }
 

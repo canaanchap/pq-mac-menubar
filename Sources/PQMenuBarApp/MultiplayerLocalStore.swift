@@ -45,6 +45,51 @@ struct MultiplayerGuildCache: Codable, Hashable {
     var fetchedAt: Date
 }
 
+struct MultiplayerGuildSummary: Codable, Hashable, Identifiable {
+    var guildId: String
+    var formalName: String
+    var shortTag: String
+    var alignmentCode: String
+    var typeCode: String
+    var motto: String
+    var memberCount: Int
+
+    var id: String { guildId }
+}
+
+struct MultiplayerGuildMember: Codable, Hashable, Identifiable {
+    var characterId: String
+    var name: String
+    var role: String
+    var status: String
+    var joinedAt: Date?
+
+    var id: String { characterId + ":" + role }
+}
+
+struct MultiplayerGuildProfile: Codable, Hashable {
+    var guildId: String
+    var formalName: String
+    var shortTag: String
+    var alignmentCode: String
+    var typeCode: String
+    var motto: String
+    var realmId: String
+    var chiefCharacterId: String
+    var chiefName: String
+    var immutableOnMembership: Bool
+    var memberCount: Int
+    var members: [MultiplayerGuildMember]
+}
+
+struct MultiplayerGuildLogEntry: Codable, Hashable, Identifiable {
+    var type: String
+    var message: String
+    var createdAt: Date?
+
+    var id: String { "\(type):\(message):\(createdAt?.timeIntervalSince1970 ?? 0)" }
+}
+
 struct MultiplayerCheckpointQueueItem: Codable, Hashable, Identifiable {
     var id: UUID
     var characterID: UUID

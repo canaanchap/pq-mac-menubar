@@ -12,6 +12,7 @@ This scaffold targets:
   - `POST /api/v1/account/verify`
   - `POST /api/v1/account/login`
   - `POST /api/v1/account/session`
+  - `POST /api/v1/account/settings`
 - Admin endpoints (implemented):
   - `POST /api/v1/admin/login`
   - `POST /api/v1/admin/logout`
@@ -21,6 +22,15 @@ This scaffold targets:
   - `GET /api/v1/admin/realms`
   - `POST /api/v1/admin/realms/create`
 - Other routes are scaffolded and currently return `501 NOT_IMPLEMENTED`.
+
+- Guild/online-character endpoints (implemented):
+  - `POST /api/v1/characters/create-online`
+  - `GET /api/v1/guilds`
+  - `POST /api/v1/guilds/create`
+  - `POST /api/v1/guilds/join`
+  - `POST /api/v1/guilds/leave`
+  - `GET /api/v1/guilds/:id`
+  - `GET /api/v1/guilds/:id/logs`
 
 ## Setup
 1. Point web root for API vhost to `backend/api/public`.
@@ -50,6 +60,7 @@ This scaffold targets:
   - Accounts list/search
   - Force verify by email
   - Realm create/list
+  - Placeholder cards for Characters, Guilds, Governance, Check-ins/Flags, Config, Scheduler
 - API target is `https://api.progressquest.me/api/v1`.
 - For browser calls from `admin.progressquest.me`, set:
   - `PQ_ADMIN_UI_ORIGIN=https://admin.progressquest.me`

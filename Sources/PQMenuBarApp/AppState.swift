@@ -133,6 +133,9 @@ final class AppState: ObservableObject {
     @Published var multiplayerRealmCache: MultiplayerRealmCache?
     @Published var multiplayerGuildCache: MultiplayerGuildCache?
     @Published var lastMultiplayerDebugVerificationCode: String?
+    @Published var multiplayerGuildDirectory: [MultiplayerGuildSummary] = []
+    @Published var multiplayerGuildProfile: MultiplayerGuildProfile?
+    @Published var multiplayerGuildLogs: [MultiplayerGuildLogEntry] = []
     @Published var multiplayerAPIBaseURL: String {
         didSet {
             UserDefaults.standard.set(multiplayerAPIBaseURL, forKey: Self.multiplayerAPIBaseURLDefaultsKey)
@@ -227,6 +230,9 @@ final class AppState: ObservableObject {
             multiplayerRealmCache = multiplayerStore.loadRealmCache()
             multiplayerGuildCache = multiplayerStore.loadGuildCache()
             lastMultiplayerDebugVerificationCode = nil
+            multiplayerGuildDirectory = []
+            multiplayerGuildProfile = nil
+            multiplayerGuildLogs = []
 
             let loaded = try Self.loadRoster(from: rosterURL, saveStore: saveStore)
             roster = loaded.characters
@@ -821,6 +827,7 @@ final class AppState: ObservableObject {
                 self.multiplayerSession = session
                 try? self.multiplayerStore.saveSession(session)
                 self.reconcileOnlineCharacterOwnership()
+                self.refreshMultiplayerRealmAndGuildState()
                 self.flash("Signed in.")
             } catch {
                 let lower = error.localizedDescription.lowercased()
@@ -895,10 +902,270 @@ final class AppState: ObservableObject {
                 )
                 try? self.multiplayerStore.saveSession(self.multiplayerSession)
                 self.reconcileOnlineCharacterOwnership()
+                self.refreshMultiplayerRealmAndGuildState()
                 self.flash("Session valid.")
             } catch {
                 self.flash("Session check failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    func refreshMultiplayerRealmAndGuildState() {
+        Task {
+            await fetchRealmsFromServer()
+            await fetchGuildDirectory()
+            await fetchCurrentGuildProfileIfKnown()
+        }
+    }
+
+    func fetchRealmsFromServer() async {
+        guard multiplayerSession != nil else { return }
+        do {
+            let json = try await multiplayerGET(path: "/api/v1/realms")
+            let data = try extractData(json)
+            let realmsRaw = data["realms"] as? [[String: Any]] ?? []
+            let realms = realmsRaw.map { row in
+                MultiplayerRealmCache.RealmSummary(
+                    realmId: stringFrom(row["realmId"]),
+                    name: stringFrom(row["name"]),
+                    status: stringFrom(row["status"]),
+                    supportsGuilds: (row["supportsGuilds"] as? Bool) ?? true
+                )
+            }
+            let cache = MultiplayerRealmCache(realms: realms, fetchedAt: Date())
+            multiplayerRealmCache = cache
+            try? multiplayerStore.saveRealmCache(cache)
+        } catch {
+            flash("Realm load failed: \(error.localizedDescription)")
+        }
+    }
+
+    func ensureOnlineCharacterRegistered(_ character: PlayerState) async -> String? {
+        guard character.isOnlineMultiplayer else { return nil }
+        guard multiplayerOwnershipMismatchMessage(for: character) == nil else { return nil }
+        guard let session = multiplayerSession else { return nil }
+        if let existing = character.serverCharacterId, !existing.isEmpty {
+            return existing
+        }
+        do {
+            let payload: [String: Any] = [
+                "sessionToken": session.sessionToken,
+                "realmId": character.realmId ?? env_value_fallback_realm(),
+                "localCharacterUUID": character.id.uuidString,
+                "name": character.name,
+                "race": character.race,
+                "className": character.characterClass,
+            ]
+            let json = try await multiplayerPOST(path: "/api/v1/characters/create-online", payload: payload)
+            let data = try extractData(json)
+            let serverCharacterId = stringFrom(data["serverCharacterId"])
+            let realmId = stringFrom(data["realmId"])
+            if let idx = roster.firstIndex(where: { $0.id == character.id }) {
+                roster[idx].serverCharacterId = serverCharacterId
+                roster[idx].realmId = realmId
+                if roster[idx].accountId == nil || roster[idx].accountId?.isEmpty == true {
+                    roster[idx].accountId = multiplayerAccount?.accountId
+                }
+                persistRoster()
+            }
+            if sessionStarted && state.activeCharacter.id == character.id {
+                var updated = state.activeCharacter
+                updated.serverCharacterId = serverCharacterId
+                updated.realmId = realmId
+                if updated.accountId == nil || updated.accountId?.isEmpty == true {
+                    updated.accountId = multiplayerAccount?.accountId
+                }
+                runtime.replaceState(GameState(activeCharacter: updated, isPaused: state.isPaused, lowCPUMode: state.lowCPUMode, lastTickAt: state.lastTickAt, rngState: state.rngState))
+            }
+            return serverCharacterId
+        } catch {
+            flash("Online character registration failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func fetchGuildDirectory() async {
+        guard multiplayerSession != nil else { return }
+        let realmId = currentContextCharacter?.realmId ?? env_value_fallback_realm()
+        do {
+            let json = try await multiplayerGET(path: "/api/v1/guilds?realmId=\(realmId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? realmId)")
+            let data = try extractData(json)
+            let raw = data["guilds"] as? [[String: Any]] ?? []
+            multiplayerGuildDirectory = raw.map {
+                MultiplayerGuildSummary(
+                    guildId: stringFrom($0["guildId"]),
+                    formalName: stringFrom($0["formalName"]),
+                    shortTag: stringFrom($0["shortTag"]),
+                    alignmentCode: stringFrom($0["alignmentCode"]),
+                    typeCode: stringFrom($0["typeCode"]),
+                    motto: stringFrom($0["motto"]),
+                    memberCount: ($0["memberCount"] as? Int) ?? 0
+                )
+            }
+        } catch {
+            flash("Guild list failed: \(error.localizedDescription)")
+        }
+    }
+
+    func createGuild(formalName: String, shortTag: String, alignmentCode: String, typeCode: String, motto: String) {
+        guard let character = currentContextCharacter else {
+            flash("No character selected.")
+            return
+        }
+        Task {
+            guard let serverCharacterId = await ensureOnlineCharacterRegistered(character) else { return }
+            guard let session = multiplayerSession else { return }
+            do {
+                let payload: [String: Any] = [
+                    "sessionToken": session.sessionToken,
+                    "serverCharacterId": serverCharacterId,
+                    "formalName": formalName,
+                    "shortTag": shortTag,
+                    "alignmentCode": alignmentCode,
+                    "typeCode": typeCode,
+                    "motto": motto,
+                ]
+                let json = try await multiplayerPOST(path: "/api/v1/guilds/create", payload: payload)
+                let data = try extractData(json)
+                let guildId = stringFrom(data["guildId"])
+                flash("Guild created: \(formalName).")
+                await fetchGuildProfile(guildId: guildId)
+                await fetchGuildDirectory()
+            } catch {
+                flash("Create guild failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func joinGuild(guildId: String) {
+        guard let character = currentContextCharacter else {
+            flash("No character selected.")
+            return
+        }
+        Task {
+            guard let serverCharacterId = await ensureOnlineCharacterRegistered(character) else { return }
+            guard let session = multiplayerSession else { return }
+            do {
+                let payload: [String: Any] = [
+                    "sessionToken": session.sessionToken,
+                    "serverCharacterId": serverCharacterId,
+                    "guildId": guildId,
+                ]
+                _ = try extractData(try await multiplayerPOST(path: "/api/v1/guilds/join", payload: payload))
+                flash("Joined guild.")
+                await fetchGuildProfile(guildId: guildId)
+                await fetchGuildDirectory()
+            } catch {
+                flash("Join guild failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func leaveCurrentGuild() {
+        guard let profile = multiplayerGuildProfile else {
+            flash("No guild profile loaded.")
+            return
+        }
+        guard let character = currentContextCharacter else {
+            flash("No character selected.")
+            return
+        }
+        Task {
+            guard let serverCharacterId = await ensureOnlineCharacterRegistered(character) else { return }
+            guard let session = multiplayerSession else { return }
+            do {
+                let payload: [String: Any] = [
+                    "sessionToken": session.sessionToken,
+                    "serverCharacterId": serverCharacterId,
+                    "guildId": profile.guildId,
+                ]
+                _ = try extractData(try await multiplayerPOST(path: "/api/v1/guilds/leave", payload: payload))
+                flash("Left guild.")
+                multiplayerGuildProfile = nil
+                multiplayerGuildLogs = []
+                await fetchGuildDirectory()
+            } catch {
+                flash("Leave guild failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func loadGuildProfile(guildId: String) {
+        Task {
+            await fetchGuildProfile(guildId: guildId)
+        }
+    }
+
+    private func fetchGuildProfile(guildId: String) async {
+        do {
+            let encoded = guildId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? guildId
+            let json = try await multiplayerGET(path: "/api/v1/guilds/\(encoded)")
+            let data = try extractData(json)
+            guard let g = data["guild"] as? [String: Any] else { return }
+            let membersRaw = g["members"] as? [[String: Any]] ?? []
+            let members = membersRaw.map { m in
+                MultiplayerGuildMember(
+                    characterId: stringFrom(m["characterId"]),
+                    name: stringFrom(m["name"]),
+                    role: stringFrom(m["role"]),
+                    status: stringFrom(m["status"]),
+                    joinedAt: Self.parseISO8601Date(stringFrom(m["joinedAt"]))
+                )
+            }
+            let profile = MultiplayerGuildProfile(
+                guildId: stringFrom(g["guildId"]),
+                formalName: stringFrom(g["formalName"]),
+                shortTag: stringFrom(g["shortTag"]),
+                alignmentCode: stringFrom(g["alignmentCode"]),
+                typeCode: stringFrom(g["typeCode"]),
+                motto: stringFrom(g["motto"]),
+                realmId: stringFrom(g["realmId"]),
+                chiefCharacterId: stringFrom(g["chiefCharacterId"]),
+                chiefName: stringFrom(g["chiefName"]),
+                immutableOnMembership: (g["immutableOnMembership"] as? Bool) ?? true,
+                memberCount: (g["memberCount"] as? Int) ?? members.count,
+                members: members
+            )
+            multiplayerGuildProfile = profile
+            multiplayerGuildCache = MultiplayerGuildCache(
+                guildId: profile.guildId,
+                formalName: profile.formalName,
+                shortTag: profile.shortTag,
+                alignmentCode: profile.alignmentCode,
+                typeCode: profile.typeCode,
+                motto: profile.motto,
+                chiefCharacterId: profile.chiefCharacterId,
+                memberCount: profile.memberCount,
+                fetchedAt: Date()
+            )
+            try? multiplayerStore.saveGuildCache(multiplayerGuildCache)
+            await fetchGuildLogs(guildId: guildId)
+        } catch {
+            flash("Guild profile failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func fetchGuildLogs(guildId: String) async {
+        do {
+            let encoded = guildId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? guildId
+            let json = try await multiplayerGET(path: "/api/v1/guilds/\(encoded)/logs")
+            let data = try extractData(json)
+            let raw = data["logs"] as? [[String: Any]] ?? []
+            multiplayerGuildLogs = raw.map {
+                MultiplayerGuildLogEntry(
+                    type: stringFrom($0["type"]),
+                    message: stringFrom($0["message"]),
+                    createdAt: Self.parseISO8601Date(stringFrom($0["createdAt"]))
+                )
+            }
+        } catch {
+            flash("Guild logs failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func fetchCurrentGuildProfileIfKnown() async {
+        if let id = multiplayerGuildCache?.guildId, !id.isEmpty {
+            await fetchGuildProfile(guildId: id)
         }
     }
 
@@ -912,6 +1179,28 @@ final class AppState: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response"])
+        }
+        let decoded = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let json = decoded as? [String: Any] else {
+            throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON response"])
+        }
+        if !(200...299).contains(http.statusCode) {
+            let message = (json["error"] as? [String: Any])?["message"] as? String ?? "HTTP \(http.statusCode)"
+            throw NSError(domain: "pq-menubar", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        return json
+    }
+
+    private func multiplayerGET(path: String) async throws -> [String: Any] {
+        let base = multiplayerAPIBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: base + path) else {
+            throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid multiplayer API URL"])
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw NSError(domain: "pq-menubar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response"])
@@ -959,6 +1248,10 @@ final class AppState: ObservableObject {
         if changed {
             persistRoster()
         }
+    }
+
+    private func env_value_fallback_realm() -> String {
+        multiplayerRealmCache?.realms.first?.realmId ?? "realm_goobland_1"
     }
 
     func refreshPortraitForCurrentCharacter() {

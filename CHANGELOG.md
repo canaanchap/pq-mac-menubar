@@ -93,3 +93,35 @@
   - renamed section to `Online Multiplayer Character Sheet`.
   - added online-specific placeholder blocks for guild/governance forthcoming systems.
 - Smoke harness token extraction now strips CR/LF to avoid malformed bearer header values.
+
+## 2026-03-10
+
+### Added
+- Guild and online-character API endpoints:
+  - `POST /api/v1/characters/create-online`
+  - `GET /api/v1/guilds`
+  - `POST /api/v1/guilds/create`
+  - `POST /api/v1/guilds/join`
+  - `POST /api/v1/guilds/leave`
+  - `GET /api/v1/guilds/:id`
+  - `GET /api/v1/guilds/:id/logs`
+- New backend handler:
+  - `backend/api/src/Handlers/GuildHandler.php`
+- Multiplayer app-side guild wiring:
+  - online character registration on demand
+  - guild directory fetch
+  - create/join/leave/load profile
+  - guild activity log fetch
+- Expanded Multiplayer tab placeholder sections for future governance and procedural systems.
+- Admin panel placeholders expanded to include all planned areas (Characters, Guilds, Governance, Check-ins/Flags, Config, Scheduler).
+
+### Changed
+- `TickEngine` XP progression now levels immediately when threshold is reached in the same kill resolution tick.
+- Multiplayer tab structure updated:
+  - session moved under Connector
+  - section renamed to `Online Multiplayer Character Sheet`
+  - added guild management controls and activity feed placeholders
+- Ownership guardrails reinforced:
+  - server-side guild APIs enforce character/account ownership
+  - app-side warning/eligibility handling for mismatched account ownership.
+- Smoke harness extended to exercise online character creation + guild create/profile/logs.

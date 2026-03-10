@@ -191,3 +191,38 @@ function ensure_default_realm_seeded(): void {
     ');
     $insert->execute([$realmId, $realmName, 'active', 1, $now, $now]);
 }
+
+function account_session_from_token(string $token): ?array {
+    $pdo = db();
+    $stmt = $pdo->prepare('
+        SELECT s.account_id, s.expires_at, s.revoked_at, a.account_uid, a.email, a.public_name, a.wants_news, a.verified
+        FROM account_sessions s
+        JOIN accounts a ON a.id = s.account_id
+        WHERE s.session_token_hash = ?
+        LIMIT 1
+    ');
+    $stmt->execute([token_hash($token)]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    return $row;
+}
+
+function require_account_session_from_body(array $body): array {
+    $token = trim((string)($body['sessionToken'] ?? ''));
+    if ($token === '') {
+        return ['error' => json_error('VALIDATION_SESSION_TOKEN', 'sessionToken is required.', [], 422)];
+    }
+    $row = account_session_from_token($token);
+    if (!$row) {
+        return ['error' => json_error('SESSION_NOT_FOUND', 'Session not found.', [], 404)];
+    }
+    if ($row['revoked_at'] !== null) {
+        return ['error' => json_error('SESSION_REVOKED', 'Session revoked.', [], 401)];
+    }
+    if (strtotime((string)$row['expires_at']) < time()) {
+        return ['error' => json_error('SESSION_EXPIRED', 'Session expired.', [], 401)];
+    }
+    return ['session' => $row];
+}

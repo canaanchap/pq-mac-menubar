@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/Handlers/AccountHandler.php';
 require_once __DIR__ . '/Handlers/AdminHandler.php';
+require_once __DIR__ . '/Handlers/GuildHandler.php';
 
 function route_request(string $method, string $uri): array {
     $path = parse_url($uri, PHP_URL_PATH) ?? '/';
@@ -63,6 +64,34 @@ function route_request(string $method, string $uri): array {
         return AccountHandler::updateSettings(parse_json_body());
     }
 
+    if ($path === '/api/v1/characters/create-online' && $method === 'POST') {
+        return GuildHandler::createOnlineCharacter(parse_json_body());
+    }
+
+    if ($path === '/api/v1/guilds' && $method === 'GET') {
+        return GuildHandler::listGuilds($_GET);
+    }
+
+    if ($path === '/api/v1/guilds/create' && $method === 'POST') {
+        return GuildHandler::createGuild(parse_json_body());
+    }
+
+    if ($path === '/api/v1/guilds/join' && $method === 'POST') {
+        return GuildHandler::joinGuild(parse_json_body());
+    }
+
+    if ($path === '/api/v1/guilds/leave' && $method === 'POST') {
+        return GuildHandler::leaveGuild(parse_json_body());
+    }
+
+    if ($method === 'GET' && preg_match('#^/api/v1/guilds/([^/]+)$#', $path, $m)) {
+        return GuildHandler::guildProfile($m[1]);
+    }
+
+    if ($method === 'GET' && preg_match('#^/api/v1/guilds/([^/]+)/logs$#', $path, $m)) {
+        return GuildHandler::guildLogs($m[1]);
+    }
+
     if ($path === '/api/v1/admin/login' && $method === 'POST') {
         return AdminHandler::login(parse_json_body());
     }
@@ -91,13 +120,7 @@ function route_request(string $method, string $uri): array {
         return AdminHandler::realmsCreate(parse_json_body());
     }
 
-    $stubRoutes = [
-        'POST /api/v1/characters/create-online',
-        'POST /api/v1/guilds/create',
-        'POST /api/v1/guilds/join',
-        'POST /api/v1/guilds/leave',
-        'POST /api/v1/characters/checkin',
-    ];
+    $stubRoutes = ['POST /api/v1/characters/checkin'];
 
     $routeKey = $method . ' ' . $path;
     if (in_array($routeKey, $stubRoutes, true) || preg_match('#^GET /api/v1/guilds/[^/]+$#', $routeKey) || preg_match('#^POST /api/v1/guilds/[^/]+/motions/create$#', $routeKey) || preg_match('#^POST /api/v1/guilds/[^/]+/motions/[^/]+/vote$#', $routeKey) || preg_match('#^POST /api/v1/guilds/[^/]+/presence$#', $routeKey)) {
