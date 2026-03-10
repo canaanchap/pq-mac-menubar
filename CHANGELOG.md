@@ -81,3 +81,15 @@
 - Added online-character ownership protection:
   - online characters store owner account ID at creation/sign-in reconciliation.
   - mismatch warning shown and surfaced when loading/using a character under wrong account.
+
+### Additional fixes
+- Apache/PHP bearer token compatibility hardening:
+  - `.htaccess` now forwards `Authorization` to PHP environment.
+  - API token parser now checks `HTTP_AUTHORIZATION`, `REDIRECT_HTTP_AUTHORIZATION`, and `getallheaders()`.
+- Fixed XP level-up timing:
+  - leveling now triggers immediately when XP reaches threshold on the same kill resolution tick (no extra-kill delay).
+- Multiplayer tab layout updates:
+  - moved session info into `Connector`.
+  - renamed section to `Online Multiplayer Character Sheet`.
+  - added online-specific placeholder blocks for guild/governance forthcoming systems.
+- Smoke harness token extraction now strips CR/LF to avoid malformed bearer header values.

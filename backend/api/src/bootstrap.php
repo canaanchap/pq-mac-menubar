@@ -125,6 +125,20 @@ function email_is_valid(string $email): bool {
 function bearer_token_from_request(): ?string {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if ($header === '') {
+        $header = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    }
+    if ($header === '' && function_exists('getallheaders')) {
+        $all = getallheaders();
+        if (is_array($all)) {
+            foreach ($all as $k => $v) {
+                if (strcasecmp((string)$k, 'Authorization') === 0) {
+                    $header = (string)$v;
+                    break;
+                }
+            }
+        }
+    }
+    if ($header === '') {
         return null;
     }
     if (!preg_match('/^Bearer\s+(.+)$/i', $header, $m)) {

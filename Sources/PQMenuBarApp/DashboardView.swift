@@ -463,23 +463,7 @@ struct DashboardView: View {
                         }
                     }
                 } else {
-                    GroupBox("Session") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let session = appState.multiplayerSession {
-                                Text("Session: \(session.isExpired ? "Expired" : "Active")")
-                                    .foregroundStyle(session.isExpired ? .red : .green)
-                                Text("Expires: \(session.expiresAt.formatted(.dateTime.year().month().day().hour().minute()))")
-                                    .foregroundStyle(.secondary)
-                                HStack {
-                                    Button("Sign Out (Local)") {
-                                        appState.multiplayerSignOutLocalSession()
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    GroupBox("Character Multiplayer Mode") {
+                    GroupBox("Online Multiplayer Character Sheet") {
                         VStack(alignment: .leading, spacing: 8) {
                             if let target {
                                 if let mismatch = appState.multiplayerOwnershipMismatchMessage(for: target) {
@@ -506,6 +490,21 @@ struct DashboardView: View {
                                     Text("Server Character ID:")
                                     Text(target.serverCharacterId ?? "-").foregroundStyle(.secondary)
                                 }
+                                HStack {
+                                    Text("Tracking Status:")
+                                    Text(appState.multiplayerOwnershipMismatchMessage(for: target) == nil ? "Eligible" : "Blocked (owner mismatch)")
+                                        .foregroundStyle(appState.multiplayerOwnershipMismatchMessage(for: target) == nil ? .green : .red)
+                                }
+
+                                Divider()
+                                Text("Guild Status (placeholder)")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("Not connected yet. Upcoming: create/join/leave guild, member list, role.")
+                                    .foregroundStyle(.secondary)
+                                Text("Governance State (placeholder)")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("Upcoming: motions, voting windows, quorum, no-confidence.")
+                                    .foregroundStyle(.secondary)
                             } else {
                                 Text("No character selected.")
                                     .foregroundStyle(.secondary)
@@ -549,7 +548,17 @@ struct DashboardView: View {
                             Text("Admin: https://admin.progressquest.me")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("Scaffold state: local models + tab shell only (no live API calls yet).")
+                            if let session = appState.multiplayerSession {
+                                Text("Session: \(session.isExpired ? "Expired" : "Active")")
+                                    .foregroundStyle(session.isExpired ? .red : .green)
+                                Text("Session Expires: \(session.expiresAt.formatted(.dateTime.year().month().day().hour().minute()))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Session: Not signed in")
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text("Connector state: account auth live; guild/governance sync pending.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

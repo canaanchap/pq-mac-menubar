@@ -47,11 +47,10 @@ public struct TickEngine {
         let gain = state.activeCharacter.task?.kind == .kill
 
         if gain {
-            if state.activeCharacter.expBar.done {
+            let inc = (state.activeCharacter.taskBar.max / 1000)
+            state.activeCharacter.expBar.increment(inc)
+            while state.activeCharacter.expBar.done {
                 levelUp(player: &state.activeCharacter, rng: &rng, events: &events)
-            } else {
-                let inc = (state.activeCharacter.taskBar.max / 1000)
-                state.activeCharacter.expBar.increment(inc)
             }
         }
 

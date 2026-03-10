@@ -33,7 +33,7 @@ curl -sS -X POST "$API_BASE/account/register" \
 echo "==> Admin login"
 ADMIN_TOKEN="$(curl -sS -X POST "$API_BASE/admin/login" \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" | jq -r '.data.token')"
+  -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}" | jq -r '.data.token' | tr -d '\r\n')"
 
 if [[ -z "$ADMIN_TOKEN" || "$ADMIN_TOKEN" == "null" ]]; then
   echo "Failed to get admin token." >&2
