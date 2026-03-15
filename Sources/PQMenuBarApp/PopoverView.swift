@@ -324,28 +324,32 @@ struct PopoverView: View {
 private struct PopoverTaskProgressBar: View {
     let percent: Double
     @State private var displayed: Double
-    @State private var appearedAt: Date = .distantPast
+    @State private var lastRaw: Double
 
     init(percent: Double) {
         self.percent = percent
-        _displayed = State(initialValue: max(0, min(100, percent)))
+        let start = max(0, min(100, percent))
+        _displayed = State(initialValue: start)
+        _lastRaw = State(initialValue: start)
     }
 
     var body: some View {
         ProgressView(value: displayed, total: 100)
             .tint(.red)
-            .onAppear {
-                appearedAt = Date()
-                displayed = clamped(percent)
-            }
             .onChange(of: percent) { _, newValue in
-                if Date().timeIntervalSince(appearedAt) < 0.25 {
-                    displayed = clamped(newValue)
+                let raw = clamped(newValue)
+                if raw + 0.001 < lastRaw {
+                    var txn = Transaction()
+                    txn.disablesAnimations = true
+                    withTransaction(txn) {
+                        displayed = raw
+                    }
                 } else {
                     withAnimation(.easeOut(duration: 0.22)) {
-                        displayed = clamped(newValue)
+                        displayed = raw
                     }
                 }
+                lastRaw = raw
             }
     }
 

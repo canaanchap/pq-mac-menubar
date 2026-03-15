@@ -76,7 +76,12 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(betaReentryLoadMaskEnabled, forKey: Self.betaReentryMaskDefaultsKey)
         }
     }
-    @Published var portraitImageURL: URL?
+    @Published var portraitImageURL: URL? {
+        didSet {
+            portraitImage = Self.loadPortraitImage(from: portraitImageURL)
+        }
+    }
+    @Published private(set) var portraitImage: NSImage?
     @Published var openAIAPIKey: String {
         didSet {
             UserDefaults.standard.set(openAIAPIKey, forKey: Self.openAIAPIKeyDefaultsKey)
@@ -172,6 +177,12 @@ final class AppState: ObservableObject {
     private var menubarTrackByCharacterID: [UUID: MenubarIconTrackMode] = [:]
     private var recentEventsByCharacterID: [UUID: [GameEvent]] = [:]
     private var hasCompletedInitialization: Bool = false
+    private var lastUIStatePublishAt: Date = .distantPast
+    private let uiStatePublishInterval: TimeInterval = 0.20
+    private let uiStatePublishIntervalBackground: TimeInterval = 0.75
+    private var dashboardVisible: Bool = false
+    private var lastRosterStatePublishAt: Date = .distantPast
+    private let rosterStatePublishInterval: TimeInterval = 2.0
 
     init() {
         do {
@@ -244,6 +255,7 @@ final class AppState: ObservableObject {
             statusMessage = nil
             runtimeStateMarker = .idle
             portraitImageURL = nil
+            portraitImage = nil
 
             let initialCharacter = loaded.characters.first ?? Self.placeholderCharacter()
             let initialState = GameState(activeCharacter: initialCharacter, isPaused: true)
@@ -257,20 +269,29 @@ final class AppState: ObservableObject {
             runtime.onStateChange = { [weak self] newState in
                 DispatchQueue.main.async {
                     guard let self else { return }
-                    self.state = newState
+                    let now = Date()
+                    let previousState = self.state
+                    if self.shouldPublishUIState(previous: previousState, next: newState, now: now) {
+                        self.state = newState
+                        self.lastUIStatePublishAt = now
+                    }
                     if self.sessionStarted {
                         self.runtimeStateMarker = newState.isPaused ? .paused : .running
                     }
                     guard self.sessionStarted else { return }
                     if let idx = self.roster.firstIndex(where: { $0.id == newState.activeCharacter.id }) {
-                        let previousLevel = self.roster[idx].level
+                        let previousRoster = self.roster[idx]
+                        let previousLevel = self.lastSeenLevelByCharacterID[newState.activeCharacter.id] ?? previousRoster.level
                         var updated = newState.activeCharacter
                         let minCapacity = 10 + updated.stats[.strength]
                         if updated.inventoryCapacity < minCapacity {
                             updated.inventoryCapacity = minCapacity
                         }
-                        let levelChanged = self.roster[idx].level != updated.level
-                        self.roster[idx] = updated
+                        let levelChanged = previousRoster.level != updated.level
+                        if self.shouldPublishRosterState(previous: previousRoster, next: updated, now: now) {
+                            self.roster[idx] = updated
+                            self.lastRosterStatePublishAt = now
+                        }
                         self.persistRosterIfDue(force: levelChanged)
                         self.handleAutomaticPortraitUpdate(character: updated, previousLevel: previousLevel)
                     }
@@ -321,6 +342,39 @@ final class AppState: ObservableObject {
         } catch {
             fatalError("Failed to initialize AppState: \(error)")
         }
+    }
+
+    private func shouldPublishUIState(previous: GameState, next: GameState, now: Date) -> Bool {
+        if !sessionStarted { return true }
+        if previous.isPaused != next.isPaused { return true }
+        if previous.activeCharacter.id != next.activeCharacter.id { return true }
+        if previous.activeCharacter.level != next.activeCharacter.level { return true }
+        if previous.activeCharacter.task?.kind != next.activeCharacter.task?.kind { return true }
+        if previous.activeCharacter.questBook.currentQuest != next.activeCharacter.questBook.currentQuest { return true }
+        if previous.activeCharacter.questBook.act != next.activeCharacter.questBook.act { return true }
+
+        let wrappedTask = next.activeCharacter.taskProgressPercent + 0.001 < previous.activeCharacter.taskProgressPercent
+        if wrappedTask { return true }
+
+        let interval = dashboardVisible ? uiStatePublishInterval : uiStatePublishIntervalBackground
+        return now.timeIntervalSince(lastUIStatePublishAt) >= interval
+    }
+
+    func setDashboardVisible(_ visible: Bool) {
+        dashboardVisible = visible
+    }
+
+    private func shouldPublishRosterState(previous: PlayerState, next: PlayerState, now: Date) -> Bool {
+        if previous.id != next.id { return true }
+        if previous.level != next.level { return true }
+        if previous.task?.kind != next.task?.kind { return true }
+        if previous.questBook.act != next.questBook.act { return true }
+        if previous.questBook.quests.count != next.questBook.quests.count { return true }
+        if previous.inventoryItems.count != next.inventoryItems.count { return true }
+        if previous.inventoryGold != next.inventoryGold { return true }
+        let wrappedTask = next.taskProgressPercent + 0.001 < previous.taskProgressPercent
+        if wrappedTask { return true }
+        return now.timeIntervalSince(lastRosterStatePublishAt) >= rosterStatePublishInterval
     }
 
     var selectedCharacter: PlayerState? {
@@ -1355,8 +1409,7 @@ final class AppState: ObservableObject {
     }
 
     func portraitNSImage() -> NSImage? {
-        guard let url = portraitImageURL else { return nil }
-        return NSImage(contentsOf: url)
+        portraitImage
     }
 
     func chooseBaseImageForCurrentCharacter() {
@@ -1411,6 +1464,11 @@ final class AppState: ObservableObject {
 
     var hasOpenAIAPIKey: Bool {
         !openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func loadPortraitImage(from url: URL?) -> NSImage? {
+        guard let url else { return nil }
+        return NSImage(contentsOf: url)
     }
 
     func saveOpenAIAPIKey(_ newKey: String) {

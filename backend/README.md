@@ -39,8 +39,16 @@ This scaffold targets:
 - Admin config/governance endpoints (implemented):
   - `GET /api/v1/admin/config/alignment`
   - `POST /api/v1/admin/config/alignment/upsert`
+  - `POST /api/v1/admin/config/alignment/create`
+  - `POST /api/v1/admin/config/alignment/toggle`
+  - `POST /api/v1/admin/config/alignment/delete`
   - `GET /api/v1/admin/config/type`
   - `POST /api/v1/admin/config/type/upsert`
+  - `POST /api/v1/admin/config/type/create`
+  - `POST /api/v1/admin/config/type/toggle`
+  - `POST /api/v1/admin/config/type/delete`
+  - `GET /api/v1/admin/characters`
+  - `GET /api/v1/admin/guilds`
   - `GET /api/v1/admin/guilds/pending-abandonment`
   - `POST /api/v1/admin/guilds/approve-abandonment`
 

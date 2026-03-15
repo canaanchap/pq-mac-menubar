@@ -260,6 +260,70 @@ final class AdminHandler {
         return ['status' => 200, 'body' => json_success(['updated' => true, 'code' => $code])];
     }
 
+    public static function alignmentCreate(array $body): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $code = trim((string)($body['code'] ?? ''));
+        $displayName = trim((string)($body['displayName'] ?? ''));
+        $alignmentValue = (int)($body['alignmentValue'] ?? 0);
+        if ($code === '' || $displayName === '') {
+            return json_error('VALIDATION_ALIGNMENT_FIELDS', 'code and displayName are required.', [], 422);
+        }
+
+        $pdo = db();
+        $existsStmt = $pdo->prepare('SELECT 1 FROM guild_alignment_options WHERE code = ? LIMIT 1');
+        $existsStmt->execute([$code]);
+        if ($existsStmt->fetchColumn()) {
+            return json_error('DUPLICATE_ALIGNMENT_CODE', 'Alignment code already exists.', [], 409);
+        }
+
+        $sortOrder = self::nextSortOrder($pdo, 'guild_alignment_options');
+        $now = now_utc();
+        $stmt = $pdo->prepare('
+            INSERT INTO guild_alignment_options (code, display_name, alignment_value, include_flag, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, 1, ?, ?, ?)
+        ');
+        $stmt->execute([$code, $displayName, $alignmentValue, $sortOrder, $now, $now]);
+        return ['status' => 201, 'body' => json_success(['created' => true, 'code' => $code])];
+    }
+
+    public static function alignmentToggle(array $body): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $code = trim((string)($body['code'] ?? ''));
+        $include = (bool)($body['include'] ?? false);
+        if ($code === '') {
+            return json_error('VALIDATION_ALIGNMENT_CODE', 'code is required.', [], 422);
+        }
+        $stmt = db()->prepare('UPDATE guild_alignment_options SET include_flag = ?, updated_at = ? WHERE code = ?');
+        $stmt->execute([$include ? 1 : 0, now_utc(), $code]);
+        if ($stmt->rowCount() < 1) {
+            return json_error('ALIGNMENT_NOT_FOUND', 'Alignment code not found.', [], 404);
+        }
+        return ['status' => 200, 'body' => json_success(['updated' => true, 'code' => $code, 'include' => $include])];
+    }
+
+    public static function alignmentDelete(array $body): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $code = trim((string)($body['code'] ?? ''));
+        if ($code === '') {
+            return json_error('VALIDATION_ALIGNMENT_CODE', 'code is required.', [], 422);
+        }
+        $stmt = db()->prepare('DELETE FROM guild_alignment_options WHERE code = ?');
+        $stmt->execute([$code]);
+        if ($stmt->rowCount() < 1) {
+            return json_error('ALIGNMENT_NOT_FOUND', 'Alignment code not found.', [], 404);
+        }
+        return ['status' => 200, 'body' => json_success(['deleted' => true, 'code' => $code])];
+    }
+
     public static function typeList(): array {
         $auth = require_admin_session_or_error();
         if ($auth !== null) {
@@ -310,6 +374,185 @@ final class AdminHandler {
         ');
         $stmt->execute([$code, $displayName, $include ? 1 : 0, $sortOrder, $now, $now]);
         return ['status' => 200, 'body' => json_success(['updated' => true, 'code' => $code])];
+    }
+
+    public static function typeCreate(array $body): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $code = trim((string)($body['code'] ?? ''));
+        $displayName = trim((string)($body['displayName'] ?? ''));
+        if ($code === '' || $displayName === '') {
+            return json_error('VALIDATION_TYPE_FIELDS', 'code and displayName are required.', [], 422);
+        }
+
+        $pdo = db();
+        $existsStmt = $pdo->prepare('SELECT 1 FROM guild_type_options WHERE code = ? LIMIT 1');
+        $existsStmt->execute([$code]);
+        if ($existsStmt->fetchColumn()) {
+            return json_error('DUPLICATE_TYPE_CODE', 'Type code already exists.', [], 409);
+        }
+
+        $sortOrder = self::nextSortOrder($pdo, 'guild_type_options');
+        $now = now_utc();
+        $stmt = $pdo->prepare('
+            INSERT INTO guild_type_options (code, display_name, include_flag, sort_order, created_at, updated_at)
+            VALUES (?, ?, 1, ?, ?, ?)
+        ');
+        $stmt->execute([$code, $displayName, $sortOrder, $now, $now]);
+        return ['status' => 201, 'body' => json_success(['created' => true, 'code' => $code])];
+    }
+
+    public static function typeToggle(array $body): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $code = trim((string)($body['code'] ?? ''));
+        $include = (bool)($body['include'] ?? false);
+        if ($code === '') {
+            return json_error('VALIDATION_TYPE_CODE', 'code is required.', [], 422);
+        }
+        $stmt = db()->prepare('UPDATE guild_type_options SET include_flag = ?, updated_at = ? WHERE code = ?');
+        $stmt->execute([$include ? 1 : 0, now_utc(), $code]);
+        if ($stmt->rowCount() < 1) {
+            return json_error('TYPE_NOT_FOUND', 'Type code not found.', [], 404);
+        }
+        return ['status' => 200, 'body' => json_success(['updated' => true, 'code' => $code, 'include' => $include])];
+    }
+
+    public static function typeDelete(array $body): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $code = trim((string)($body['code'] ?? ''));
+        if ($code === '') {
+            return json_error('VALIDATION_TYPE_CODE', 'code is required.', [], 422);
+        }
+        $stmt = db()->prepare('DELETE FROM guild_type_options WHERE code = ?');
+        $stmt->execute([$code]);
+        if ($stmt->rowCount() < 1) {
+            return json_error('TYPE_NOT_FOUND', 'Type code not found.', [], 404);
+        }
+        return ['status' => 200, 'body' => json_success(['deleted' => true, 'code' => $code])];
+    }
+
+    public static function characters(): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $q = trim((string)($_GET['q'] ?? ''));
+        $accountId = trim((string)($_GET['accountId'] ?? ''));
+        $limit = max(1, min(300, (int)($_GET['limit'] ?? 150)));
+        $pdo = db();
+        if ($accountId !== '') {
+            $sql = '
+                SELECT c.character_uid, c.name, c.race, c.class_name, c.network_mode, c.realm_id, c.created_at, c.updated_at,
+                       a.account_uid, a.email, a.public_name
+                FROM characters c
+                JOIN accounts a ON a.id = c.account_id
+                WHERE a.account_uid = ?
+                ORDER BY c.created_at DESC
+                LIMIT ' . $limit;
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$accountId]);
+        } else if ($q !== '') {
+            $like = '%' . $q . '%';
+            $sql = '
+                SELECT c.character_uid, c.name, c.race, c.class_name, c.network_mode, c.realm_id, c.created_at, c.updated_at,
+                       a.account_uid, a.email, a.public_name
+                FROM characters c
+                JOIN accounts a ON a.id = c.account_id
+                WHERE c.name LIKE ? OR a.email LIKE ? OR a.public_name LIKE ?
+                ORDER BY c.created_at DESC
+                LIMIT ' . $limit;
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$like, $like, $like]);
+        } else {
+            $sql = '
+                SELECT c.character_uid, c.name, c.race, c.class_name, c.network_mode, c.realm_id, c.created_at, c.updated_at,
+                       a.account_uid, a.email, a.public_name
+                FROM characters c
+                JOIN accounts a ON a.id = c.account_id
+                ORDER BY c.created_at DESC
+                LIMIT ' . $limit;
+            $stmt = $pdo->query($sql);
+        }
+        $rows = $stmt->fetchAll() ?: [];
+        $items = array_map(static function (array $row): array {
+            return [
+                'characterId' => (string)$row['character_uid'],
+                'name' => (string)$row['name'],
+                'race' => (string)$row['race'],
+                'className' => (string)$row['class_name'],
+                'networkMode' => (string)$row['network_mode'],
+                'realmRef' => (string)$row['realm_id'],
+                'createdAt' => gmdate('c', strtotime((string)$row['created_at'])),
+                'updatedAt' => gmdate('c', strtotime((string)$row['updated_at'])),
+                'ownerAccountId' => (string)$row['account_uid'],
+                'ownerEmail' => (string)$row['email'],
+                'ownerPublicName' => (string)$row['public_name'],
+            ];
+        }, $rows);
+        return ['status' => 200, 'body' => json_success(['characters' => $items])];
+    }
+
+    public static function guilds(): array {
+        $auth = require_admin_session_or_error();
+        if ($auth !== null) {
+            return $auth;
+        }
+        $q = trim((string)($_GET['q'] ?? ''));
+        $limit = max(1, min(300, (int)($_GET['limit'] ?? 150)));
+        $pdo = db();
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $sql = '
+                SELECT g.guild_uid, g.formal_name, g.short_tag, g.alignment_code, g.type_code, g.status, g.motto, r.realm_uid, c.name AS chief_name, c.character_uid AS chief_character_uid,
+                       COUNT(gm.id) AS active_members
+                FROM guilds g
+                JOIN realms r ON r.id = g.realm_id
+                JOIN characters c ON c.id = g.chief_character_id
+                LEFT JOIN guild_members gm ON gm.guild_id = g.id AND gm.status = "active"
+                WHERE g.formal_name LIKE ? OR g.short_tag LIKE ? OR g.alignment_code LIKE ? OR g.type_code LIKE ?
+                GROUP BY g.id
+                ORDER BY g.created_at DESC
+                LIMIT ' . $limit;
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$like, $like, $like, $like]);
+        } else {
+            $sql = '
+                SELECT g.guild_uid, g.formal_name, g.short_tag, g.alignment_code, g.type_code, g.status, g.motto, r.realm_uid, c.name AS chief_name, c.character_uid AS chief_character_uid,
+                       COUNT(gm.id) AS active_members
+                FROM guilds g
+                JOIN realms r ON r.id = g.realm_id
+                JOIN characters c ON c.id = g.chief_character_id
+                LEFT JOIN guild_members gm ON gm.guild_id = g.id AND gm.status = "active"
+                GROUP BY g.id
+                ORDER BY g.created_at DESC
+                LIMIT ' . $limit;
+            $stmt = $pdo->query($sql);
+        }
+        $rows = $stmt->fetchAll() ?: [];
+        $items = array_map(static function (array $row): array {
+            return [
+                'guildId' => (string)$row['guild_uid'],
+                'formalName' => (string)$row['formal_name'],
+                'shortTag' => (string)$row['short_tag'],
+                'alignmentCode' => (string)$row['alignment_code'],
+                'typeCode' => (string)$row['type_code'],
+                'status' => (string)$row['status'],
+                'motto' => (string)($row['motto'] ?? ''),
+                'realmId' => (string)$row['realm_uid'],
+                'chiefCharacterId' => (string)$row['chief_character_uid'],
+                'chiefName' => (string)$row['chief_name'],
+                'activeMembers' => (int)$row['active_members'],
+            ];
+        }, $rows);
+        return ['status' => 200, 'body' => json_success(['guilds' => $items])];
     }
 
     public static function pendingAbandonmentList(): array {
@@ -391,5 +634,11 @@ final class AdminHandler {
         }
 
         return ['status' => 200, 'body' => json_success(['approved' => true, 'guildId' => $guildId])];
+    }
+
+    private static function nextSortOrder(PDO $pdo, string $table): int {
+        $stmt = $pdo->query('SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM ' . $table);
+        $maxSort = (int)($stmt->fetch()['max_sort'] ?? 0);
+        return $maxSort + 10;
     }
 }

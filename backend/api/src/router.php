@@ -138,12 +138,44 @@ function route_request(string $method, string $uri): array {
         return AdminHandler::alignmentUpsert(parse_json_body());
     }
 
+    if ($path === '/api/v1/admin/config/alignment/create' && $method === 'POST') {
+        return AdminHandler::alignmentCreate(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/config/alignment/toggle' && $method === 'POST') {
+        return AdminHandler::alignmentToggle(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/config/alignment/delete' && $method === 'POST') {
+        return AdminHandler::alignmentDelete(parse_json_body());
+    }
+
     if ($path === '/api/v1/admin/config/type' && $method === 'GET') {
         return AdminHandler::typeList();
     }
 
     if ($path === '/api/v1/admin/config/type/upsert' && $method === 'POST') {
         return AdminHandler::typeUpsert(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/config/type/create' && $method === 'POST') {
+        return AdminHandler::typeCreate(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/config/type/toggle' && $method === 'POST') {
+        return AdminHandler::typeToggle(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/config/type/delete' && $method === 'POST') {
+        return AdminHandler::typeDelete(parse_json_body());
+    }
+
+    if ($path === '/api/v1/admin/characters' && $method === 'GET') {
+        return AdminHandler::characters();
+    }
+
+    if ($path === '/api/v1/admin/guilds' && $method === 'GET') {
+        return AdminHandler::guilds();
     }
 
     if ($path === '/api/v1/admin/guilds/pending-abandonment' && $method === 'GET') {

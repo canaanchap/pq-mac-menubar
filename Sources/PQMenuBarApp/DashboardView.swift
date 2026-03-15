@@ -74,6 +74,9 @@ struct DashboardView: View {
     @State private var guildNoConfidenceEnabledDraft: Bool = false
     @State private var showMPGovernancePanel: Bool = false
     @State private var showMPProceduralPanel: Bool = false
+    @State private var didInitialScrollPlot: Bool = false
+    @State private var didInitialScrollInventory: Bool = false
+    @State private var didInitialScrollQuests: Bool = false
 
     private let tickRateOptions: [Double] = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
     private var canShowMultiplayerTab: Bool {
@@ -84,26 +87,35 @@ struct DashboardView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            overview
+            tabBody(.overview) {
+                overview
+            }
                 .tabItem { Text("Overview") }
                 .tag(Tab.overview)
 
             if canShowMultiplayerTab {
-                multiplayer
+                tabBody(.multiplayer) {
+                    multiplayer
+                }
                     .tabItem { Text("Multiplayer") }
                     .tag(Tab.multiplayer)
             }
 
-            characterAndLog
+            tabBody(.characterLog) {
+                characterAndLog
+            }
                 .tabItem { Text("Character + Log") }
                 .tag(Tab.characterLog)
 
-            settings
+            tabBody(.settings) {
+                settings
+            }
                 .tabItem { Text("Settings") }
                 .tag(Tab.settings)
         }
         .frame(minWidth: 980, minHeight: 650)
         .onAppear {
+            appState.setDashboardVisible(true)
             overviewMaskEnabled = appState.betaReentryLoadMaskEnabled
             installKeyboardMonitorIfNeeded()
             applyRequestedTab()
@@ -116,6 +128,7 @@ struct DashboardView: View {
         }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .overview {
+                resetOverviewInitialScrollFlags()
                 triggerOverviewReentryMaskIfNeeded()
             } else if newTab == .multiplayer {
                 appState.refreshMultiplayerRealmAndGuildState()
@@ -137,6 +150,7 @@ struct DashboardView: View {
             }
         }
         .onDisappear {
+            appState.setDashboardVisible(false)
             removeKeyboardMonitor()
             stopReentryMask()
         }
@@ -189,6 +203,21 @@ struct DashboardView: View {
         .sheet(isPresented: $showAccountSettingsSheet) {
             accountSettingsDialog
         }
+    }
+
+    @ViewBuilder
+    private func tabBody<Content: View>(_ tab: Tab, @ViewBuilder content: () -> Content) -> some View {
+        if selectedTab == tab {
+            content()
+        } else {
+            Color.clear
+        }
+    }
+
+    private func resetOverviewInitialScrollFlags() {
+        didInitialScrollPlot = false
+        didInitialScrollInventory = false
+        didInitialScrollQuests = false
     }
 
     private var overview: some View {
@@ -260,7 +289,9 @@ struct DashboardView: View {
                                         Text("[ ] Prologue")
                                     } else {
                                         if p.questBook.act > 1 {
-                                            ForEach(Array((1..<(p.questBook.act)).enumerated()), id: \.offset) { _, act in
+                                            let completedActs = max(0, p.questBook.act - 1)
+                                            let startAct = max(1, completedActs - 39)
+                                            ForEach(Array((startAct...completedActs).enumerated()), id: \.offset) { _, act in
                                                 Text("[x] \(PQLingo.actName(act))")
                                             }
                                         }
@@ -270,11 +301,8 @@ struct DashboardView: View {
                                 }
                             }
                             .onAppear {
-                                DispatchQueue.main.async {
-                                    proxy.scrollTo("plot-bottom", anchor: .bottom)
-                                }
-                            }
-                            .onChange(of: p.questBook.act) { _, _ in
+                                guard !didInitialScrollPlot else { return }
+                                didInitialScrollPlot = true
                                 DispatchQueue.main.async {
                                     proxy.scrollTo("plot-bottom", anchor: .bottom)
                                 }
@@ -319,7 +347,7 @@ struct DashboardView: View {
                         ScrollViewReader { proxy in
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    ForEach(Array(p.inventoryItems.prefix(40).enumerated()), id: \.offset) { _, item in
+                                    ForEach(Array(p.inventoryItems.suffix(40).enumerated()), id: \.offset) { _, item in
                                         HStack {
                                             Text(item.name)
                                             Spacer()
@@ -330,11 +358,8 @@ struct DashboardView: View {
                                 }
                             }
                             .onAppear {
-                                DispatchQueue.main.async {
-                                    proxy.scrollTo("inventory-bottom", anchor: .bottom)
-                                }
-                            }
-                            .onChange(of: p.inventoryItems.count) { _, _ in
+                                guard !didInitialScrollInventory else { return }
+                                didInitialScrollInventory = true
                                 DispatchQueue.main.async {
                                     proxy.scrollTo("inventory-bottom", anchor: .bottom)
                                 }
@@ -366,11 +391,8 @@ struct DashboardView: View {
                                 }
                             }
                             .onAppear {
-                                DispatchQueue.main.async {
-                                    proxy.scrollTo("quests-bottom", anchor: .bottom)
-                                }
-                            }
-                            .onChange(of: p.questBook.quests.count) { _, _ in
+                                guard !didInitialScrollQuests else { return }
+                                didInitialScrollQuests = true
                                 DispatchQueue.main.async {
                                     proxy.scrollTo("quests-bottom", anchor: .bottom)
                                 }
@@ -402,7 +424,6 @@ struct DashboardView: View {
         .padding(.top, 8)
         .padding(.bottom, 4)
         .font(.system(size: 14, weight: .regular, design: .monospaced))
-        .textSelection(.enabled)
     }
 
     private var characterAndLog: some View {
@@ -472,27 +493,73 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("You are not signed in to a multiplayer account.")
                                 .foregroundStyle(.secondary)
-                            Button("Open Settings: Multiplayer Account") {
-                                selectedTab = .settings
-                            }
+                            Button("Open Settings: Multiplayer Account") { selectedTab = .settings }
                         }
                     }
                 } else {
+                    GroupBox("Guild Activity + Progress") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                let seconds = Int(context.date.timeIntervalSince1970) % 600
+                                let percent = Double(seconds) / 6.0
+                                Text("Multiplayer Sync")
+                                    .font(.subheadline.weight(.semibold))
+                                ProgressView(value: percent, total: 100)
+                                    .tint(.blue)
+                                    .overlay(alignment: .center) {
+                                        Text(String(format: "%.1f%%", percent))
+                                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    }
+                                Text("Next push/download in \(max(1, 600 - seconds))s.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                Divider().padding(.vertical, 2)
+                                Text("Realm Rank Window")
+                                    .font(.subheadline.weight(.semibold))
+                                ForEach(Array(realmRankRows(for: target, now: context.date).enumerated()), id: \.offset) { _, row in
+                                    HStack {
+                                        Text("#\(row.rank)").frame(width: 46, alignment: .leading)
+                                        Text(row.name).frame(maxWidth: .infinity, alignment: .leading)
+                                        Text("Lv \(row.level)")
+                                    }
+                                    .font(.system(size: 12, weight: row.isCurrent ? .bold : .regular, design: .monospaced))
+                                }
+                            }
+                            Divider().padding(.vertical, 2)
+                            Text("Guild Activity Feed")
+                                .font(.subheadline.weight(.semibold))
+                            if appState.multiplayerGuildLogs.isEmpty {
+                                Text("No guild activity loaded yet.")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ScrollView {
+                                    LazyVStack(alignment: .leading, spacing: 6) {
+                                        ForEach(appState.multiplayerGuildLogs) { log in
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(log.message)
+                                                Text("\(log.type) • \(log.createdAt?.formatted(.dateTime.hour().minute()) ?? "-")")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxHeight: 150)
+                            }
+                        }
+                    }
+
                     GroupBox("Online Multiplayer Character Sheet") {
                         VStack(alignment: .leading, spacing: 8) {
                             if let target {
                                 if let mismatch = appState.multiplayerOwnershipMismatchMessage(for: target) {
-                                    Text(mismatch)
-                                        .foregroundStyle(.red)
+                                    Text(mismatch).foregroundStyle(.red)
                                 }
                                 HStack { Text("Character:"); Text(target.name).foregroundStyle(.secondary) }
                                 HStack { Text("Mode:"); Text((target.networkMode ?? "offline").capitalized).foregroundStyle(.secondary) }
-                                HStack { Text("Realm ID:"); Text(target.realmId ?? "-").foregroundStyle(.secondary) }
-                                HStack { Text("Server Character ID:"); Text(target.serverCharacterId ?? "-").foregroundStyle(.secondary) }
-                                HStack { Text("Tracking Status:"); Text(appState.multiplayerOwnershipMismatchMessage(for: target) == nil ? "Eligible" : "Blocked").foregroundStyle(appState.multiplayerOwnershipMismatchMessage(for: target) == nil ? .green : .red) }
                             } else {
-                                Text("No character selected.")
-                                    .foregroundStyle(.secondary)
+                                Text("No character selected.").foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -515,123 +582,77 @@ struct DashboardView: View {
                                     guard !guildSelectedToJoin.isEmpty else { return }
                                     appState.joinGuild(guildId: guildSelectedToJoin)
                                 }
-                                .disabled(guildSelectedToJoin.isEmpty)
+                                .disabled(guildSelectedToJoin.isEmpty || appState.multiplayerGuildProfile != nil)
                             }
 
                             if let profile = appState.multiplayerGuildProfile {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("\(profile.formalName) (\(profile.shortTag))")
-                                        .font(.headline)
-                                    Text("Status: \(profile.status) • Members: \(profile.memberCount) • Chief: \(profile.chiefName)")
-                                        .foregroundStyle(.secondary)
-                                    Text("Alignment: \(profile.alignmentCode) • Type: \(profile.typeCode)")
-                                        .foregroundStyle(.secondary)
-                                    Text("Majority: \(profile.rules.majorityType) • Basis: \(profile.rules.majorityBasis)")
-                                        .foregroundStyle(.secondary)
-                                    Text("Quorum: \(profile.rules.quorumEnabled ? "On \(profile.rules.quorumPercent ?? 0)%" : "Off") • No confidence: \(profile.rules.noConfidenceEnabled ? "On" : "Off")")
-                                        .foregroundStyle(.secondary)
+                                    Text("\(profile.formalName) (\(profile.shortTag))").font(.headline)
+                                    Text("Status: \(profile.status) • Members: \(profile.memberCount) • Chief: \(profile.chiefName)").foregroundStyle(.secondary)
+                                    Text("Alignment: \(profile.alignmentCode) • Type: \(profile.typeCode)").foregroundStyle(.secondary)
+                                    Text("Majority: \(profile.rules.majorityType) • Basis: \(profile.rules.majorityBasis)").foregroundStyle(.secondary)
+                                    Text("Quorum: \(profile.rules.quorumEnabled ? "On \(profile.rules.quorumPercent ?? 0)%" : "Off") • No confidence: \(profile.rules.noConfidenceEnabled ? "On" : "Off")").foregroundStyle(.secondary)
                                     if !profile.motto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Text("Motto: \(profile.motto)")
-                                            .foregroundStyle(.secondary)
+                                        Text("Motto: \(profile.motto)").foregroundStyle(.secondary)
                                     }
                                 }
-                                Button("Leave Guild") {
-                                    appState.leaveCurrentGuild()
-                                }
+                                Button("Leave Guild") { appState.leaveCurrentGuild() }
                             } else {
-                                Text("No guild currently loaded.")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-
-                    GroupBox("Create Guild / Governance") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                TextField("Formal Name", text: $guildFormalNameDraft)
-                                TextField("Short Tag", text: $guildShortTagDraft)
-                            }
-                            HStack {
-                                Picker("Alignment", selection: $guildAlignmentDraft) {
-                                    ForEach(appState.multiplayerAlignmentOptions.filter(\.include)) { option in
-                                        Text(option.displayName).tag(option.code)
+                                Text("No guild currently loaded.").foregroundStyle(.secondary)
+                                Divider().padding(.vertical, 2)
+                                Text("Petition to Create Guild")
+                                    .font(.subheadline.weight(.semibold))
+                                HStack {
+                                    TextField("Formal Name", text: $guildFormalNameDraft)
+                                    TextField("Short Tag", text: $guildShortTagDraft)
+                                }
+                                HStack {
+                                    Picker("Alignment", selection: $guildAlignmentDraft) {
+                                        ForEach(appState.multiplayerAlignmentOptions.filter(\.include)) { option in
+                                            Text(option.displayName).tag(option.code)
+                                        }
                                     }
-                                }
-                                Picker("Type", selection: $guildTypeDraft) {
-                                    ForEach(appState.multiplayerTypeOptions.filter(\.include)) { option in
-                                        Text(option.displayName).tag(option.code)
-                                    }
-                                }
-                            }
-                            TextField("Motto", text: $guildMottoDraft)
-                            HStack {
-                                Picker("Majority", selection: $guildMajorityTypeDraft) {
-                                    Text("50%").tag("functional_50")
-                                    Text("3/5 (60%)").tag("three_fifths_60")
-                                    Text("2/3 (66.7%)").tag("two_thirds_66_7")
-                                    Text("3/4 (75%)").tag("three_fourths_75")
-                                }
-                                Picker("Basis", selection: $guildMajorityBasisDraft) {
-                                    Text("Present").tag("present")
-                                    Text("Absolute").tag("absolute")
-                                }
-                            }
-                            Toggle("Quorum Enabled", isOn: $guildQuorumEnabledDraft)
-                            if guildQuorumEnabledDraft {
-                                TextField("Quorum %", text: $guildQuorumPercentDraft)
-                                    .textFieldStyle(.roundedBorder)
-                            }
-                            Toggle("No Confidence Enabled", isOn: $guildNoConfidenceEnabledDraft)
-                            Button("Create Guild") {
-                                appState.createGuild(
-                                    formalName: guildFormalNameDraft,
-                                    shortTag: guildShortTagDraft,
-                                    alignmentCode: guildAlignmentDraft,
-                                    typeCode: guildTypeDraft,
-                                    motto: guildMottoDraft,
-                                    majorityType: guildMajorityTypeDraft,
-                                    majorityBasis: guildMajorityBasisDraft,
-                                    quorumEnabled: guildQuorumEnabledDraft,
-                                    quorumPercent: Int(guildQuorumPercentDraft),
-                                    noConfidenceEnabled: guildNoConfidenceEnabledDraft
-                                )
-                            }
-                            .disabled(guildFormalNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || guildShortTagDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                    }
-
-                    GroupBox("Guild Activity") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if appState.multiplayerGuildLogs.isEmpty {
-                                Text("No guild activity loaded yet.")
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ScrollView {
-                                    LazyVStack(alignment: .leading, spacing: 6) {
-                                        ForEach(appState.multiplayerGuildLogs) { log in
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(log.message)
-                                                Text("\(log.type) • \(log.createdAt?.formatted(.dateTime.hour().minute()) ?? "-")")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                            }
+                                    Picker("Type", selection: $guildTypeDraft) {
+                                        ForEach(appState.multiplayerTypeOptions.filter(\.include)) { option in
+                                            Text(option.displayName).tag(option.code)
                                         }
                                     }
                                 }
-                                .frame(maxHeight: 160)
+                                TextField("Motto", text: $guildMottoDraft)
+                                HStack {
+                                    Picker("Majority", selection: $guildMajorityTypeDraft) {
+                                        Text("50%").tag("functional_50")
+                                        Text("3/5 (60%)").tag("three_fifths_60")
+                                        Text("2/3 (66.7%)").tag("two_thirds_66_7")
+                                        Text("3/4 (75%)").tag("three_fourths_75")
+                                    }
+                                    Picker("Basis", selection: $guildMajorityBasisDraft) {
+                                        Text("Present").tag("present")
+                                        Text("Absolute").tag("absolute")
+                                    }
+                                }
+                                Toggle("Quorum Enabled", isOn: $guildQuorumEnabledDraft)
+                                if guildQuorumEnabledDraft {
+                                    TextField("Quorum %", text: $guildQuorumPercentDraft)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                Toggle("No Confidence Enabled", isOn: $guildNoConfidenceEnabledDraft)
+                                Button("Petition to Create Guild") {
+                                    appState.createGuild(
+                                        formalName: guildFormalNameDraft,
+                                        shortTag: guildShortTagDraft,
+                                        alignmentCode: guildAlignmentDraft,
+                                        typeCode: guildTypeDraft,
+                                        motto: guildMottoDraft,
+                                        majorityType: guildMajorityTypeDraft,
+                                        majorityBasis: guildMajorityBasisDraft,
+                                        quorumEnabled: guildQuorumEnabledDraft,
+                                        quorumPercent: Int(guildQuorumPercentDraft),
+                                        noConfidenceEnabled: guildNoConfidenceEnabledDraft
+                                    )
+                                }
+                                .disabled(guildFormalNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || guildShortTagDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             }
-                        }
-                    }
-
-                    GroupBox("Guild Progress (Placeholder Idle Loop)") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            let pseudo = Double((target?.level ?? 1) % 100) / 100.0
-                            ProgressView(value: pseudo)
-                            Text("Council drafting charter amendments...")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Toggle("Show Governance Panel (Beta)", isOn: $showMPGovernancePanel)
-                            Toggle("Show Procedural Feed (Beta)", isOn: $showMPProceduralPanel)
                         }
                     }
 
@@ -655,6 +676,19 @@ struct DashboardView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
+                            if let target {
+                                Text("Realm ID: \(target.realmId ?? "-")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("Server Character ID: \(target.serverCharacterId ?? "-")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("Tracking Status: \(appState.multiplayerOwnershipMismatchMessage(for: target) == nil ? "Eligible" : "Blocked")")
+                                    .font(.caption)
+                                    .foregroundStyle(appState.multiplayerOwnershipMismatchMessage(for: target) == nil ? .green : .red)
+                            }
+                            Toggle("Show Governance Panel (Beta)", isOn: $showMPGovernancePanel)
+                            Toggle("Show Procedural Feed (Beta)", isOn: $showMPProceduralPanel)
                             Text("Connector state: account + guild sync live.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -964,6 +998,32 @@ struct DashboardView: View {
         }
     }
 
+    private struct RealmRankRow {
+        var rank: Int
+        var name: String
+        var level: Int
+        var isCurrent: Bool
+    }
+
+    private func realmRankRows(for target: PlayerState?, now: Date) -> [RealmRankRow] {
+        let currentName = target?.name ?? "Unknown"
+        let currentLevel = target?.level ?? 1
+        let baseRank = max(4, 1000 - (currentLevel * 2))
+        let seed = Int(now.timeIntervalSince1970 / 10) % 97
+        var rows: [RealmRankRow] = []
+        for delta in -3...3 {
+            let rank = max(1, baseRank + delta)
+            if delta == 0 {
+                rows.append(.init(rank: rank, name: currentName, level: currentLevel, isCurrent: true))
+            } else {
+                let neighborName = "Realm Hero \(rank + seed)"
+                let neighborLevel = max(1, currentLevel + (delta < 0 ? 1 : -1) + (3 - abs(delta)))
+                rows.append(.init(rank: rank, name: neighborName, level: neighborLevel, isCurrent: false))
+            }
+        }
+        return rows
+    }
+
     private var loadedDataTwoColumns: some View {
         let rows: [(String, Int)] = [
             ("Classes", appState.dataBundle.classes.count),
@@ -1113,12 +1173,7 @@ struct DashboardView: View {
     }
 
     private func plainTaskMetricBar(_ percent: Double) -> some View {
-        ProgressView(value: max(0, min(100, percent)), total: 100)
-            .tint(.red)
-            .overlay(alignment: .center) {
-                Text(String(format: "%.2f%%", max(0, min(100, percent))))
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-            }
+        ResetOnWrapProgressBar(percent: percent, tint: .red)
     }
 
     private var developerOverlay: some View {
@@ -1819,5 +1874,45 @@ private struct AnimatedMetricBar: View {
 
     private func clamped(_ value: Double) -> Double {
         max(0, min(100, value))
+    }
+}
+
+private struct ResetOnWrapProgressBar: View {
+    let percent: Double
+    let tint: Color
+
+    @State private var displayed: Double
+    @State private var lastRaw: Double
+
+    init(percent: Double, tint: Color) {
+        self.percent = percent
+        self.tint = tint
+        let start = max(0, min(100, percent))
+        _displayed = State(initialValue: start)
+        _lastRaw = State(initialValue: start)
+    }
+
+    var body: some View {
+        ProgressView(value: displayed, total: 100)
+            .tint(tint)
+            .overlay(alignment: .center) {
+                Text(String(format: "%.2f%%", max(0, min(100, percent))))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            }
+            .onChange(of: percent) { _, newValue in
+                let raw = max(0, min(100, newValue))
+                if raw + 0.001 < lastRaw {
+                    var txn = Transaction()
+                    txn.disablesAnimations = true
+                    withTransaction(txn) {
+                        displayed = raw
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        displayed = raw
+                    }
+                }
+                lastRaw = raw
+            }
     }
 }

@@ -63,6 +63,14 @@ echo "==> Admin accounts list"
 curl -sS "$API_BASE/admin/accounts?limit=20" \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
 
+echo "==> Admin characters list"
+curl -sS "$API_BASE/admin/characters?limit=20" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
+
+echo "==> Admin guilds list"
+curl -sS "$API_BASE/admin/guilds?limit=20" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
+
 echo "==> Admin realms list (should include Goobland seed)"
 curl -sS "$API_BASE/admin/realms" \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq .

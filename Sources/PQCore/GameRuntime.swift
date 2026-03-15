@@ -14,6 +14,8 @@ public final class GameRuntime {
     private var stateDirty: Bool = true
     private var lastPersistAt: Date = .distantPast
     private let persistInterval: TimeInterval = 60
+    private let maxInMemoryEvents = 200
+    private let maxElapsedPerTick: TimeInterval = 1.0
 
     public var onStateChange: ((GameState) -> Void)?
     public var onEvent: ((GameEvent) -> Void)?
@@ -34,7 +36,7 @@ public final class GameRuntime {
         guard timer == nil else { return }
 
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        let baseInterval = state.lowCPUMode ? 0.5 : 0.1
+        let baseInterval = state.lowCPUMode ? 1.0 : 0.25
         let interval = max(0.01, baseInterval)
         timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(80))
         timer.setEventHandler { [weak self] in
@@ -100,13 +102,20 @@ public final class GameRuntime {
     }
 
     private func performTick() {
+        if state.isPaused {
+            return
+        }
         let previous = state
         let now = Date()
         let elapsed = now.timeIntervalSince(state.lastTickAt)
-        let scaledElapsed = elapsed * max(0.25, tickRateMultiplier)
+        let clampedElapsed = min(max(0, elapsed), maxElapsedPerTick)
+        let scaledElapsed = clampedElapsed * max(0.25, tickRateMultiplier)
         let tickEvents = engine.tick(state: &state, elapsed: scaledElapsed)
         for event in tickEvents {
             events.append(event)
+            if events.count > maxInMemoryEvents {
+                events.removeFirst(events.count - maxInMemoryEvents)
+            }
             logStore.append(event)
             onEvent?(event)
         }
